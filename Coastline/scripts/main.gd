@@ -441,7 +441,7 @@ func _set_paused(value: bool) -> void:
 	mouse_captured = not value
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if value else Input.MOUSE_MODE_CAPTURED
 	if value:
-		pause_layer.get_child(0).get_child(0).get_child(0).get_child(2).grab_focus()
+		pause_layer.get_child(0).get_child(0).get_child(0).get_child(3).grab_focus()
 
 func _resume_game() -> void:
 	_set_paused(false)
