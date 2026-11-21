@@ -32,7 +32,7 @@ jobs:
       - name: Verify exported files
         run: |
           test -s Coastline/build/Coastline.exe
-          test -s Coastline/build/Coastline.exe.pck
+          test -s Coastline/build/Coastline.pck
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
