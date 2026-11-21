@@ -30,7 +30,7 @@ jobs:
           curl -fL https://models.vinish.dev/people/business-woman.glb -o Coastline/assets/people/business-woman.glb
           curl -fL https://models.vinish.dev/people/construction-worker.glb -o Coastline/assets/people/construction-worker.glb
           curl -fL https://models.vinish.dev/people/doctor.glb -o Coastline/assets/people/doctor.glb
-          curl -fL https://models.vinish.dev/people/runner.glb -o Coastline/assets/people/runner.glb
+          curl -fL https://models.vinish.dev/people/runner-woman.glb -o Coastline/assets/people/runner.glb
 
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
