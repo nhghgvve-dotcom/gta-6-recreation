@@ -265,11 +265,15 @@ func _create_player() -> void:
 	var spring := SpringArm3D.new()
 	spring.spring_length = 5.4
 	spring.margin = 0.25
+	# Place the camera behind the character, who faces -Z.
+	spring.rotation.y = PI
 	camera_pivot.add_child(spring)
 	camera = Camera3D.new()
 	camera.fov = 70
-	camera.current = true
+	# Counter-rotate so the camera looks back toward the character.
+	camera.rotation.y = PI
 	spring.add_child(camera)
+	camera.make_current()
 
 func _create_car() -> void:
 	car = Node3D.new()
