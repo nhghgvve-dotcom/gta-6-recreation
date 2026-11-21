@@ -13,17 +13,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Godot
+
+      - name: Set up Godot with Windows export templates
         uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.4.1
           use-dotnet: false
+          include-templates: true
+
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
+
       - name: Export Windows build
         run: |
           mkdir -p Coastline/build
           godot --headless --path Coastline --export-release "Windows Desktop" Coastline/build/Coastline.exe
+
+      - name: Verify exported files
+        run: |
+          test -s Coastline/build/Coastline.exe
+          test -s Coastline/build/Coastline.exe.pck
+
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
