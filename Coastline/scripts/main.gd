@@ -7,9 +7,8 @@ const CAR_SPEED := 34.0
 
 var player: CharacterBody3D
 var player_visual: Node3D
+var camera_pivot: Node3D
 var camera: Camera3D
-var camera_yaw := 0.0
-var camera_pitch := -0.22
 var car: Node3D
 var driving := false
 var car_velocity := 0.0
@@ -20,12 +19,16 @@ var help_label: Label
 var speed_label: Label
 var sun: DirectionalLight3D
 var rng := RandomNumberGenerator.new()
+var npcs: Array[Node3D] = []
+var npc_directions: Dictionary = {}
+var npc_walk_times: Dictionary = {}
 
 func _ready() -> void:
 	rng.randomize()
 	_setup_environment()
 	_build_world()
 	_create_player()
+	_create_npcs()
 	_create_car()
 	_create_hud()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -95,7 +98,7 @@ func _build_world() -> void:
 	var white := _mat(Color(0.91, 0.90, 0.80))
 	var yellow := _mat(Color(0.95, 0.73, 0.22))
 	var ocean := _mat(Color(0.035, 0.36, 0.51), 0.24, 0.18)
-	_static_box(self, Vector3(0, -1.2, 0), Vector3(WORLD_SIZE, 2, WORLD_SIZE), grass)
+	_mesh_box(self, Vector3(0, -1.2, 0), Vector3(WORLD_SIZE, 2, WORLD_SIZE), grass, "Island")
 	_mesh_box(self, Vector3(-WORLD_SIZE * 0.5 - 35, -1.4, 0), Vector3(110, 1, WORLD_SIZE + 100), ocean, "Ocean")
 	_mesh_box(self, Vector3(-WORLD_SIZE * 0.5 + 18, -0.48, 0), Vector3(42, 0.35, WORLD_SIZE + 10), sand, "Beach")
 	for z in [-180.0, -90.0, 0.0, 90.0, 180.0]:
@@ -106,20 +109,19 @@ func _build_world() -> void:
 		_mesh_box(self, Vector3(x, -0.10, 0), Vector3(ROAD_WIDTH, 0.22, 410), asphalt, "CrossStreet")
 		for z in range(-190, 211, 20):
 			_mesh_box(self, Vector3(x, 0.02, float(z)), Vector3(0.22, 0.035, 9), white, "LaneMark")
-	# Buildings are generated only inside the blocks between roads.
-	# Each block is 90 m wide; keep every footprint well clear of the 18 m roads.
-	var lot_centers_x := [-105.0, -15.0, 75.0, 165.0]
-	var lot_centers_z := [-135.0, -45.0, 45.0, 135.0]
-	for cx in lot_centers_x:
-		for cz in lot_centers_z:
-			var count := rng.randi_range(2, 3)
+	for gx in range(-2, 4):
+		for gz in range(-2, 3):
+			var cx := float(gx) * 90.0 + 30.0
+			var cz := float(gz) * 90.0 + 45.0
+			if abs(cx) > 225 or abs(cz) > 215:
+				continue
+			var count := rng.randi_range(2, 4)
 			for i in range(count):
-				var w := rng.randf_range(17.0, 23.0)
-				var d := rng.randf_range(17.0, 23.0)
-				# Maximum offset plus half footprint stays inside the road-free lot.
-				var bx := cx + rng.randf_range(-12.0, 12.0)
-				var bz := cz + rng.randf_range(-12.0, 12.0)
-				var h := rng.randf_range(12.0, 52.0)
+				var bx := cx + rng.randf_range(-26, 26)
+				var bz := cz + rng.randf_range(-25, 25)
+				var w := rng.randf_range(16, 30)
+				var d := rng.randf_range(16, 30)
+				var h := rng.randf_range(12, 52)
 				var palette := [Color(0.78, 0.72, 0.61), Color(0.69, 0.74, 0.73), Color(0.84, 0.82, 0.74), Color(0.53, 0.62, 0.64), Color(0.78, 0.63, 0.49)]
 				var building_mat := _mat(palette[rng.randi_range(0, palette.size() - 1)], 0.74)
 				_static_box(self, Vector3(bx, h * 0.5, bz), Vector3(w, h, d), building_mat)
@@ -158,119 +160,79 @@ func _create_palm(pos: Vector3) -> void:
 		leaf.rotation.x = -0.18
 		add_child(leaf)
 
-func _make_capsule(parent: Node3D, pos: Vector3, radius: float, height: float, material: Material, node_name: String) -> MeshInstance3D:
-	var part := MeshInstance3D.new()
-	part.name = node_name
-	var mesh := CapsuleMesh.new()
-	mesh.radius = radius
-	mesh.height = height
-	part.mesh = mesh
-	part.material_override = material
-	part.position = pos
-	parent.add_child(part)
-	return part
-
 func _create_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
-	# CharacterBody origin is at the capsule centre; the island top is y=-0.2.
-	player.position = Vector3(5, -0.2, 12)
-	player.floor_snap_length = 0.35
-	player.floor_max_angle = deg_to_rad(48.0)
+	player.position = Vector3(5, 1.1, 12)
 	add_child(player)
-
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.42
+	capsule.height = 1.8
 	player_visual = Node3D.new()
-	player_visual.name = "HumanCharacter"
-	player_visual.position.y = 0.2
 	player.add_child(player_visual)
-
-	var skin := _mat(Color(0.68, 0.46, 0.32), 0.72)
-	var shirt := _mat(Color(0.10, 0.22, 0.34), 0.78)
-	var trousers := _mat(Color(0.075, 0.095, 0.12), 0.88)
-	var shoes := _mat(Color(0.025, 0.03, 0.035), 0.9)
-	var hair := _mat(Color(0.055, 0.035, 0.025), 0.95)
-	var eye_mat := _mat(Color(0.025, 0.018, 0.012), 0.45)
-
-	# Torso, neck and head create a recognisable human silhouette.
-	_make_capsule(player_visual, Vector3(0, 1.02, 0), 0.255, 0.78, shirt, "Torso")
-	var neck := MeshInstance3D.new()
-	var neck_mesh := CylinderMesh.new()
-	neck_mesh.top_radius = 0.085
-	neck_mesh.bottom_radius = 0.10
-	neck_mesh.height = 0.16
-	neck.mesh = neck_mesh
-	neck.material_override = skin
-	neck.position = Vector3(0, 1.43, 0)
-	player_visual.add_child(neck)
-
+	var body_mesh := MeshInstance3D.new()
+	body_mesh.mesh = capsule
+	body_mesh.material_override = _mat(Color(0.13, 0.25, 0.42))
+	player_visual.add_child(body_mesh)
 	var head := MeshInstance3D.new()
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.17
-	head_mesh.height = 0.36
-	head.mesh = head_mesh
-	head.material_override = skin
-	head.position = Vector3(0, 1.68, 0)
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.28
+	sphere.height = 0.56
+	head.mesh = sphere
+	head.material_override = _mat(Color(0.72, 0.52, 0.38))
+	head.position.y = 1.05
 	player_visual.add_child(head)
-
-	var hair_cap := MeshInstance3D.new()
-	var hair_mesh := SphereMesh.new()
-	hair_mesh.radius = 0.176
-	hair_mesh.height = 0.19
-	hair_cap.mesh = hair_mesh
-	hair_cap.material_override = hair
-	hair_cap.position = Vector3(0, 1.79, -0.015)
-	player_visual.add_child(hair_cap)
-
-	# Small facial details face the character's forward direction (-Z).
-	for eye_x in [-0.065, 0.065]:
-		var eye := MeshInstance3D.new()
-		var eye_mesh := SphereMesh.new()
-		eye_mesh.radius = 0.018
-		eye_mesh.height = 0.025
-		eye.mesh = eye_mesh
-		eye.material_override = eye_mat
-		eye.position = Vector3(eye_x, 1.70, -0.158)
-		player_visual.add_child(eye)
-
-	# Separate upper arms, forearms, thighs and lower legs.
-	for side in [-1.0, 1.0]:
-		var upper_arm := _make_capsule(player_visual, Vector3(side * 0.31, 1.10, 0), 0.095, 0.43, shirt, "UpperArm")
-		upper_arm.rotation.z = side * -0.12
-		var forearm := _make_capsule(player_visual, Vector3(side * 0.36, 0.76, -0.015), 0.075, 0.34, skin, "Forearm")
-		forearm.rotation.z = side * -0.08
-		var hand := MeshInstance3D.new()
-		var hand_mesh := SphereMesh.new()
-		hand_mesh.radius = 0.085
-		hand_mesh.height = 0.13
-		hand.mesh = hand_mesh
-		hand.material_override = skin
-		hand.position = Vector3(side * 0.38, 0.57, -0.015)
-		player_visual.add_child(hand)
-
-		var thigh := _make_capsule(player_visual, Vector3(side * 0.13, 0.39, 0), 0.125, 0.48, trousers, "Thigh")
-		var shin := _make_capsule(player_visual, Vector3(side * 0.13, 0.075, -0.015), 0.095, 0.38, trousers, "LowerLeg")
-		var shoe := _mesh_box(player_visual, Vector3(side * 0.13, -0.12, -0.075), Vector3(0.19, 0.12, 0.32), shoes, "Shoe")
-		shoe.rotation.x = 0.04
-
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-	shape.radius = 0.34
+	shape.radius = 0.42
 	shape.height = 1.8
 	collision.shape = shape
-	collision.position.y = 0.9
 	player.add_child(collision)
-
-	# Version 2 camera: independent camera node, no SpringArm transform chain.
-	# This avoids the blank-sky view caused by nested camera transforms.
+	camera_pivot = Node3D.new()
+	camera_pivot.position = Vector3(0, 1.45, 0)
+	player.add_child(camera_pivot)
+	var spring := SpringArm3D.new()
+	spring.spring_length = 6.0
+	spring.margin = 0.25
+	camera_pivot.add_child(spring)
 	camera = Camera3D.new()
-	camera.name = "GameplayCamera"
-	camera.fov = 72.0
-	camera.near = 0.1
-	camera.far = 900.0
-	add_child(camera)
-	camera.make_current()
-	camera_yaw = player.rotation.y
-	_update_camera()
+	camera.fov = 74
+	spring.add_child(camera)
+
+func _create_npcs() -> void:
+	# Pedestrians use simple stylized models and wander along the sidewalks.
+	var positions := [
+		Vector3(-125, 0.0, -145), Vector3(-82, 0.0, -128),
+		Vector3(-35, 0.0, -55), Vector3(5, 0.0, -58),
+		Vector3(68, 0.0, 38), Vector3(105, 0.0, 57),
+		Vector3(155, 0.0, 128), Vector3(185, 0.0, 145),
+		Vector3(-175, 0.0, 55), Vector3(-195, 0.0, 78),
+		Vector3(55, 0.0, 175), Vector3(95, 0.0, 195)
+	]
+	var clothes := [Color(0.15, 0.38, 0.72), Color(0.78, 0.32, 0.18), Color(0.18, 0.55, 0.35), Color(0.62, 0.42, 0.72), Color(0.85, 0.68, 0.22)]
+	for i in range(positions.size()):
+		var npc := Node3D.new()
+		npc.name = "Pedestrian_%02d" % i
+		npc.position = positions[i]
+		add_child(npc)
+		var shirt := _mat(clothes[i % clothes.size()])
+		var skin := _mat(Color(0.66, 0.47, 0.34))
+		var pants := _mat(Color(0.12, 0.16, 0.22))
+		_mesh_box(npc, Vector3(0, 1.05, 0), Vector3(0.58, 0.82, 0.32), shirt, "Torso")
+		var head := MeshInstance3D.new()
+		var head_mesh := SphereMesh.new()
+		head_mesh.radius = 0.22
+		head_mesh.height = 0.44
+		head.mesh = head_mesh
+		head.material_override = skin
+		head.position.y = 1.68
+		npc.add_child(head)
+		for side in [-1.0, 1.0]:
+			_mesh_box(npc, Vector3(side * 0.19, 0.43, 0), Vector3(0.19, 0.72, 0.22), pants, "Leg")
+			_mesh_box(npc, Vector3(side * 0.43, 1.08, 0), Vector3(0.18, 0.68, 0.2), skin, "Arm")
+		npcs.append(npc)
+		npc_directions[npc.get_instance_id()] = (1.0 if i % 2 == 0 else -1.0)
+		npc_walk_times[npc.get_instance_id()] = rng.randf_range(2.0, 5.0)
 
 func _create_car() -> void:
 	car = Node3D.new()
@@ -321,7 +283,7 @@ func _create_hud() -> void:
 	_update_hud()
 
 func _update_hud() -> void:
-	hud.text = "COASTLINE 2.0  |  FREE ROAM"
+	hud.text = "COASTLINE  |  FREE ROAM"
 	if driving:
 		help_label.text = "WASD Drive   •   Mouse Look   •   E Exit   •   ESC Release Mouse"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
@@ -336,11 +298,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and mouse_captured:
 		if driving:
 			car_yaw -= event.relative.x * 0.0025
-			camera_pitch = clamp(camera_pitch - event.relative.y * 0.002, -0.75, 0.25)
+			camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - event.relative.y * 0.002, -0.45, 0.25)
 		else:
-			camera_yaw -= event.relative.x * 0.0025
-			player.rotation.y = camera_yaw
-			camera_pitch = clamp(camera_pitch - event.relative.y * 0.002, -0.75, 0.25)
+			player.rotation.y -= event.relative.x * 0.0025
+			camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - event.relative.y * 0.002, -0.65, 0.35)
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
 		if driving:
 			_exit_car()
@@ -348,6 +309,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_enter_car()
 
 func _physics_process(delta: float) -> void:
+	_update_npcs(delta)
 	if driving:
 		_drive_car(delta)
 	else:
@@ -375,6 +337,77 @@ func _move_player(delta: float) -> void:
 	player.global_position.x = clamp(player.global_position.x, -238, 238)
 	player.global_position.z = clamp(player.global_position.z, -238, 238)
 
+func _update_npcs(delta: float) -> void:
+	for npc in npcs:
+		if not is_instance_valid(npc):
+			continue
+		var key := npc.get_instance_id()
+		var direction: float = npc_directions.get(key, 1.0)
+		var remaining: float = npc_walk_times.get(key, 2.0) - delta
+		if remaining <= 0.0:
+			direction *= -1.0
+			remaining = rng.randf_range(2.0, 5.0)
+		npc_directions[key] = direction
+		npc_walk_times[key] = remaining
+		npc.position.x += direction * 0.75 * delta
+		npc.rotation.y = PI / 2.0 if direction > 0.0 else -PI / 2.0
+
+func _check_car_pedestrian_collisions() -> void:
+	if abs(car_velocity) < 5.0:
+		return
+	for npc in npcs.duplicate():
+		if is_instance_valid(npc) and npc.global_position.distance_to(car.global_position) < 2.25:
+			_spawn_npc_ragdoll(npc)
+
+func _spawn_npc_ragdoll(npc: Node3D) -> void:
+	var origin := npc.global_position
+	var clothes_color := Color(0.18, 0.42, 0.72)
+	var torso_node := npc.get_node_or_null("Torso") as MeshInstance3D
+	if torso_node and torso_node.material_override is StandardMaterial3D:
+		clothes_color = (torso_node.material_override as StandardMaterial3D).albedo_color
+	var skin := _mat(Color(0.66, 0.47, 0.34))
+	var shirt := _mat(clothes_color)
+	var pants := _mat(Color(0.12, 0.16, 0.22))
+	npcs.erase(npc)
+	npc_directions.erase(npc.get_instance_id())
+	npc_walk_times.erase(npc.get_instance_id())
+	npc.queue_free()
+	var ragdoll := Node3D.new()
+	ragdoll.name = "PedestrianRagdoll"
+	ragdoll.global_position = origin
+	add_child(ragdoll)
+	var pieces := [
+		[Vector3(0, 1.05, 0), Vector3(0.58, 0.82, 0.32), shirt],
+		[Vector3(0, 1.68, 0), Vector3(0.42, 0.42, 0.42), skin],
+		[Vector3(-0.19, 0.43, 0), Vector3(0.19, 0.72, 0.22), pants],
+		[Vector3(0.19, 0.43, 0), Vector3(0.19, 0.72, 0.22), pants],
+		[Vector3(-0.43, 1.08, 0), Vector3(0.18, 0.68, 0.2), skin],
+		[Vector3(0.43, 1.08, 0), Vector3(0.18, 0.68, 0.2), skin]
+	]
+	var push := (car.global_position - origin).normalized()
+	if push.length() < 0.1:
+		push = -car.global_transform.basis.z
+	for piece in pieces:
+		var body := RigidBody3D.new()
+		body.position = piece[0]
+		body.mass = 1.0
+		body.gravity_scale = 1.0
+		ragdoll.add_child(body)
+		var mesh := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = piece[1]
+		mesh.mesh = box
+		mesh.material_override = piece[2]
+		body.add_child(mesh)
+		var collision := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = piece[1]
+		collision.shape = shape
+		body.add_child(collision)
+		body.apply_central_impulse(push * clamp(abs(car_velocity) * 0.12, 2.0, 7.0) + Vector3(0, 2.0, 0))
+		body.apply_torque_impulse(Vector3(rng.randf_range(-2, 2), rng.randf_range(-2, 2), rng.randf_range(-2, 2)))
+	get_tree().create_timer(4.0).timeout.connect(ragdoll.queue_free)
+
 func _drive_car(delta: float) -> void:
 	var throttle := float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S))
 	var steer := float(Input.is_key_pressed(KEY_A)) - float(Input.is_key_pressed(KEY_D))
@@ -386,6 +419,7 @@ func _drive_car(delta: float) -> void:
 	car.position.x = clamp(car.position.x, -238, 238)
 	car.position.z = clamp(car.position.z, -238, 238)
 	car.position.y = 0.65
+	_check_car_pedestrian_collisions()
 	if Input.is_key_pressed(KEY_SPACE):
 		car_velocity = move_toward(car_velocity, 0, 28 * delta)
 
@@ -393,7 +427,7 @@ func _enter_car() -> void:
 	driving = true
 	player.visible = false
 	car_yaw = car.rotation.y
-	camera_pitch = -0.18
+	camera_pivot.rotation.x = -0.12
 
 func _exit_car() -> void:
 	driving = false
@@ -403,16 +437,8 @@ func _exit_car() -> void:
 	car_velocity = 0.0
 
 func _update_camera() -> void:
-	if camera == null:
-		return
-	var target: Vector3
-	var distance := 7.0
 	if driving:
-		target = car.global_position + Vector3(0, 1.35, 0)
-		camera_yaw = car_yaw
-		distance = 9.0
+		camera_pivot.global_position = car.global_position + Vector3(0, 1.9, 0)
+		camera_pivot.rotation.y = car_yaw
 	else:
-		target = player.global_position + Vector3(0, 1.35, 0)
-	var horizontal := Vector3(sin(camera_yaw), 0.0, cos(camera_yaw)) * distance
-	camera.global_position = target + horizontal + Vector3(0, 2.0 + camera_pitch * 3.0, 0)
-	camera.look_at(target, Vector3.UP)
+		camera_pivot.rotation.y = player.rotation.y
