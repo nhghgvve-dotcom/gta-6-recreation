@@ -24,6 +24,9 @@ jobs:
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
 
+      - name: Run headless startup smoke test
+        run: godot --headless --path Coastline --quit-after 8
+
       - name: Export Windows build
         run: |
           mkdir -p Coastline/build
