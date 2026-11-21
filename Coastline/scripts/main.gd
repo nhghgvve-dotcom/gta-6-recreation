@@ -2,7 +2,7 @@ extends Node3D
 
 const WORLD_SIZE := 520.0
 const ROAD_WIDTH := 18.0
-const PLAYER_SPEED := 9.0
+const PLAYER_SPEED := 5.2
 const CAR_SPEED := 34.0
 
 var player: CharacterBody3D
@@ -496,24 +496,49 @@ func _physics_process(delta: float) -> void:
 	_update_hud()
 
 func _move_player(delta: float) -> void:
-	var input := Vector2(float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A)), float(Input.is_key_pressed(KEY_S)) - float(Input.is_key_pressed(KEY_W)))
-	var direction := (player.global_transform.basis * Vector3(input.x, 0, input.y)).normalized()
-	var speed := PLAYER_SPEED * (1.65 if Input.is_key_pressed(KEY_SHIFT) else 1.0)
+	# Read movement as a camera-relative input so W always moves away from
+	# the camera and A/D stay consistent while the player looks around.
+	var input := Vector2(
+		float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A)),
+		float(Input.is_key_pressed(KEY_S)) - float(Input.is_key_pressed(KEY_W))
+	)
+	if input.length() > 1.0:
+		input = input.normalized()
+
+	var forward := -camera_pivot.global_transform.basis.z
+	var right := camera_pivot.global_transform.basis.x
+	forward.y = 0.0
+	right.y = 0.0
+	forward = forward.normalized()
+	right = right.normalized()
+	var direction := (right * input.x) - (forward * input.y)
+	if direction.length() > 1.0:
+		direction = direction.normalized()
+
+	var sprinting := Input.is_key_pressed(KEY_SHIFT)
+	var target_speed := PLAYER_SPEED * (1.55 if sprinting else 1.0)
+	var acceleration := 24.0 if direction.length() > 0.01 else 32.0
+	var target_x := direction.x * target_speed
+	var target_z := direction.z * target_speed
+	player.velocity.x = move_toward(player.velocity.x, target_x, acceleration * delta)
+	player.velocity.z = move_toward(player.velocity.z, target_z, acceleration * delta)
+
 	if direction.length() > 0.01:
-		player.velocity.x = direction.x * speed
-		player.velocity.z = direction.z * speed
-		player_visual.rotation.y = lerp_angle(player_visual.rotation.y, atan2(direction.x, direction.z), delta * 10.0)
-		_play_person_animation(player_anim_player, "run" if Input.is_key_pressed(KEY_SHIFT) else "walk")
+		# Convert the world movement direction back into player-local space
+		# before turning the imported character model.
+		var local_direction := player.global_transform.basis.inverse() * direction
+		var target_yaw := atan2(local_direction.x, local_direction.z)
+		player_visual.rotation.y = lerp_angle(player_visual.rotation.y, target_yaw, min(1.0, delta * 9.0))
+		_play_person_animation(player_anim_player, "run" if sprinting else "walk")
 	else:
-		player.velocity.x = move_toward(player.velocity.x, 0, 24 * delta)
-		player.velocity.z = move_toward(player.velocity.z, 0, 24 * delta)
-		walk_phase = 0.0
 		_play_person_animation(player_anim_player, "idle")
+
 	if player.is_on_floor():
-		if Input.is_key_pressed(KEY_SPACE):
+		if Input.is_key_pressed(KEY_SPACE) and player.velocity.y <= 0.0:
 			player.velocity.y = 6.0
 	else:
 		player.velocity.y -= 18.0 * delta
+
 	player.move_and_slide()
 	player.global_position.x = clamp(player.global_position.x, -238, 238)
 	player.global_position.z = clamp(player.global_position.z, -238, 238)
