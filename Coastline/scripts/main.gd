@@ -16,6 +16,7 @@ var npc_anim_players: Dictionary = {}
 var walk_phase := 0.0
 var camera_pivot: Node3D
 var camera: Camera3D
+var camera_spring: SpringArm3D
 var car: Node3D
 var driving := false
 var car_velocity := 0.0
@@ -60,18 +61,25 @@ func _setup_environment() -> void:
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.65
+	env.ambient_light_energy = 0.82
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.ssr_enabled = false
 	env.glow_enabled = true
-	env.glow_intensity = 0.22
+	env.glow_intensity = 0.28
+	env.glow_bloom = 0.08
+	env.adjustment_enabled = true
+	env.adjustment_brightness = 1.03
+	env.adjustment_contrast = 1.08
+	env.adjustment_saturation = 1.12
 	world_env.environment = env
 	add_child(world_env)
 	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -28, 0)
-	sun.light_energy = 1.15
+	sun.light_energy = 1.25
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 110.0
+	sun.directional_shadow_max_distance = 180.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.shadow_bias = 0.035
 	add_child(sun)
 
 func _mat(color: Color, roughness := 0.82, metallic := 0.0) -> StandardMaterial3D:
@@ -209,13 +217,14 @@ func _create_player() -> void:
 	camera_pivot = Node3D.new()
 	camera_pivot.position = Vector3(0, 1.45, 0)
 	player.add_child(camera_pivot)
-	var spring := SpringArm3D.new()
-	spring.spring_length = 6.0
-	spring.margin = 0.25
-	camera_pivot.add_child(spring)
+	camera_spring = SpringArm3D.new()
+	camera_spring.spring_length = 6.0
+	camera_spring.margin = 0.25
+	camera_spring.spring_length = 6.0
+	camera_pivot.add_child(camera_spring)
 	camera = Camera3D.new()
 	camera.fov = 74
-	spring.add_child(camera)
+	camera_spring.add_child(camera)
 
 func _instantiate_person(model_name: String) -> Node3D:
 	var path := "res://assets/people/" + model_name + ".glb"
@@ -495,6 +504,13 @@ func _exit_car() -> void:
 	player.visible = true
 	player.global_position = car.global_position + car.global_transform.basis.x * 2.4 + Vector3(0, 0.5, 0)
 	player.velocity = Vector3.ZERO
+	# The camera pivot is a child of the player. While driving it is positioned
+	# in world space beside the moving car; restore its local offset on exit so
+	# the car's distance from the original spawn can never create a huge offset.
+	camera_pivot.position = Vector3(0, 1.45, 0)
+	camera_pivot.rotation = Vector3(-0.12, player.rotation.y, 0)
+	camera_spring.spring_length = 6.0
+	camera.fov = 74.0
 	car_velocity = 0.0
 
 func _update_camera() -> void:
@@ -502,4 +518,7 @@ func _update_camera() -> void:
 		camera_pivot.global_position = car.global_position + Vector3(0, 1.9, 0)
 		camera_pivot.rotation.y = car_yaw
 	else:
+		# Keep the on-foot camera attached at a fixed local offset, independent
+		# of how far the vehicle has travelled from the starting point.
+		camera_pivot.position = Vector3(0, 1.45, 0)
 		camera_pivot.rotation.y = player.rotation.y
