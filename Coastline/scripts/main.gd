@@ -23,6 +23,10 @@ var hud: Label
 var help_label: Label
 var speed_label: Label
 var sun: DirectionalLight3D
+var impact_overlay: ColorRect
+var impact_shake_time := 0.0
+var impact_shake_strength := 0.0
+var impact_flash_time := 0.0
 var rng := RandomNumberGenerator.new()
 var npcs: Array[Node3D] = []
 var npc_directions: Dictionary = {}
@@ -316,6 +320,13 @@ func _create_hud() -> void:
 	speed_label.add_theme_font_size_override("font_size", 24)
 	speed_label.add_theme_color_override("font_color", Color(1, 1, 1))
 	layer.add_child(speed_label)
+	impact_overlay = ColorRect.new()
+	impact_overlay.name = "ImpactRedFlash"
+	impact_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	impact_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	impact_overlay.color = Color(0.72, 0.015, 0.025, 0.0)
+	impact_overlay.z_index = 100
+	layer.add_child(impact_overlay)
 	_update_hud()
 
 func _update_hud() -> void:
@@ -351,6 +362,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		_move_player(delta)
 	_update_camera()
+	_update_impact_effects(delta)
 	_update_hud()
 
 func _move_player(delta: float) -> void:
@@ -407,6 +419,7 @@ func _check_car_pedestrian_collisions() -> void:
 			_spawn_npc_ragdoll(npc)
 
 func _spawn_npc_ragdoll(npc: Node3D) -> void:
+	_trigger_impact_effect()
 	var origin := npc.global_position
 	var clothes_color := Color(0.18, 0.42, 0.72)
 	var torso_node := npc.get_node_or_null("Torso") as MeshInstance3D
@@ -454,6 +467,29 @@ func _spawn_npc_ragdoll(npc: Node3D) -> void:
 		body.apply_central_impulse(push * clamp(abs(car_velocity) * 0.12, 2.0, 7.0) + Vector3(0, 2.0, 0))
 		body.apply_torque_impulse(Vector3(rng.randf_range(-2, 2), rng.randf_range(-2, 2), rng.randf_range(-2, 2)))
 	get_tree().create_timer(4.0).timeout.connect(ragdoll.queue_free)
+
+func _trigger_impact_effect() -> void:
+	var impact_strength := clamp(abs(car_velocity) / CAR_SPEED, 0.25, 1.0)
+	impact_shake_time = max(impact_shake_time, 0.28)
+	impact_shake_strength = max(impact_shake_strength, 0.035 + impact_strength * 0.075)
+	impact_flash_time = max(impact_flash_time, 0.32)
+
+func _update_impact_effects(delta: float) -> void:
+	impact_shake_time = max(0.0, impact_shake_time - delta)
+	impact_flash_time = max(0.0, impact_flash_time - delta)
+	if impact_shake_time > 0.0:
+		var fade := impact_shake_time / 0.28
+		camera.rotation = Vector3(
+			rng.randf_range(-1.0, 1.0) * impact_shake_strength * fade,
+			rng.randf_range(-1.0, 1.0) * impact_shake_strength * fade,
+			rng.randf_range(-1.0, 1.0) * impact_shake_strength * fade * 0.45
+		)
+	else:
+		camera.rotation = Vector3.ZERO
+	if impact_flash_time > 0.0:
+		impact_overlay.color.a = 0.30 * (impact_flash_time / 0.32)
+	else:
+		impact_overlay.color.a = 0.0
 
 func _drive_car(delta: float) -> void:
 	var throttle := float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S))
