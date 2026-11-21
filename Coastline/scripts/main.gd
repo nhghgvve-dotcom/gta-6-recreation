@@ -105,19 +105,20 @@ func _build_world() -> void:
 		_mesh_box(self, Vector3(x, -0.10, 0), Vector3(ROAD_WIDTH, 0.22, 410), asphalt, "CrossStreet")
 		for z in range(-190, 211, 20):
 			_mesh_box(self, Vector3(x, 0.02, float(z)), Vector3(0.22, 0.035, 9), white, "LaneMark")
-	for gx in range(-2, 4):
-		for gz in range(-2, 3):
-			var cx := float(gx) * 90.0 + 30.0
-			var cz := float(gz) * 90.0 + 45.0
-			if abs(cx) > 225 or abs(cz) > 215:
-				continue
-			var count := rng.randi_range(2, 4)
+	# Buildings are generated only inside the blocks between roads.
+	# Each block is 90 m wide; keep every footprint well clear of the 18 m roads.
+	var lot_centers_x := [-105.0, -15.0, 75.0, 165.0]
+	var lot_centers_z := [-135.0, -45.0, 45.0, 135.0]
+	for cx in lot_centers_x:
+		for cz in lot_centers_z:
+			var count := rng.randi_range(2, 3)
 			for i in range(count):
-				var bx := cx + rng.randf_range(-26, 26)
-				var bz := cz + rng.randf_range(-25, 25)
-				var w := rng.randf_range(16, 30)
-				var d := rng.randf_range(16, 30)
-				var h := rng.randf_range(12, 52)
+				var w := rng.randf_range(17.0, 23.0)
+				var d := rng.randf_range(17.0, 23.0)
+				# Maximum offset plus half footprint stays inside the road-free lot.
+				var bx := cx + rng.randf_range(-12.0, 12.0)
+				var bz := cz + rng.randf_range(-12.0, 12.0)
+				var h := rng.randf_range(12.0, 52.0)
 				var palette := [Color(0.78, 0.72, 0.61), Color(0.69, 0.74, 0.73), Color(0.84, 0.82, 0.74), Color(0.53, 0.62, 0.64), Color(0.78, 0.63, 0.49)]
 				var building_mat := _mat(palette[rng.randi_range(0, palette.size() - 1)], 0.74)
 				_static_box(self, Vector3(bx, h * 0.5, bz), Vector3(w, h, d), building_mat)
