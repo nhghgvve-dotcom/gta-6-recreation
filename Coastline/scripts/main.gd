@@ -172,13 +172,14 @@ func _create_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
 	# CharacterBody origin is at the capsule centre; the island top is y=-0.2.
-	player.position = Vector3(5, 0.72, 12)
+	player.position = Vector3(5, -0.2, 12)
 	player.floor_snap_length = 0.35
 	player.floor_max_angle = deg_to_rad(48.0)
 	add_child(player)
 
 	player_visual = Node3D.new()
 	player_visual.name = "HumanCharacter"
+	player_visual.position.y = 0.2
 	player.add_child(player_visual)
 
 	var skin := _mat(Color(0.68, 0.46, 0.32), 0.72)
