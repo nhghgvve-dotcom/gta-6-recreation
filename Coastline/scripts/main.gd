@@ -590,7 +590,7 @@ func _quit_game() -> void:
 	get_tree().quit()
 
 func _update_hud() -> void:
-	hud.text = "COASTLINE  |  FREE ROAM"
+	hud.text = "COASTLINE  |  FREE ROAM  |  EQUIPPED: " + selected_weapon
 	if driving:
 		help_label.text = "WASD Drive   •   Mouse Look   •   E Exit   •   K Weapon Wheel"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
@@ -641,7 +641,7 @@ func _physics_process(delta: float) -> void:
 		_drive_car(delta)
 	else:
 		_move_player(delta)
-		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and fire_cooldown <= 0.0:
+		if not weapon_menu_open and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and fire_cooldown <= 0.0:
 			_fire_selected_weapon()
 	_update_camera()
 	_update_impact_effects(delta)
