@@ -11,6 +11,8 @@ var player_left_leg: Node3D
 var player_right_leg: Node3D
 var player_left_arm: Node3D
 var player_right_arm: Node3D
+var player_anim_player: AnimationPlayer
+var npc_anim_players: Dictionary = {}
 var walk_phase := 0.0
 var camera_pivot: Node3D
 var camera: Camera3D
@@ -174,56 +176,17 @@ func _create_palm(pos: Vector3) -> void:
 func _create_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
-	player.position = Vector3(5, 0.76, 12)
+	player.position = Vector3(5, 0.93, 12)
 	add_child(player)
 	player_visual = Node3D.new()
 	player_visual.name = "PlayerModel"
-	player_visual.position.y = -0.96 # Align the model feet with the capsule and island surface.
+	player_visual.position.y = -0.93
 	player.add_child(player_visual)
-	var shirt := _mat(Color(0.12, 0.30, 0.58))
-	var skin := _mat(Color(0.72, 0.52, 0.38))
-	var pants := _mat(Color(0.10, 0.14, 0.21))
-	var shoes := _mat(Color(0.035, 0.04, 0.05))
-	_mesh_box(player_visual, Vector3(0, 1.12, 0), Vector3(0.66, 0.82, 0.34), shirt, "Torso")
-	var head := MeshInstance3D.new()
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.25
-	head_mesh.height = 0.5
-	head.mesh = head_mesh
-	head.material_override = skin
-	head.position.y = 1.78
-	player_visual.add_child(head)
-	player_left_leg = Node3D.new()
-	player_left_leg.position = Vector3(-0.19, 0.78, 0)
-	player_visual.add_child(player_left_leg)
-	_mesh_box(player_left_leg, Vector3(0, -0.36, 0), Vector3(0.23, 0.72, 0.25), pants, "LeftLeg")
-	_mesh_box(player_left_leg, Vector3(0, -0.70, -0.055), Vector3(0.25, 0.16, 0.38), shoes, "LeftShoe")
-	player_right_leg = Node3D.new()
-	player_right_leg.position = Vector3(0.19, 0.78, 0)
-	player_visual.add_child(player_right_leg)
-	_mesh_box(player_right_leg, Vector3(0, -0.36, 0), Vector3(0.23, 0.72, 0.25), pants, "RightLeg")
-	_mesh_box(player_right_leg, Vector3(0, -0.70, -0.055), Vector3(0.25, 0.16, 0.38), shoes, "RightShoe")
-	player_left_arm = Node3D.new()
-	player_left_arm.position = Vector3(-0.43, 1.43, 0)
-	player_visual.add_child(player_left_arm)
-	_mesh_box(player_left_arm, Vector3(0, -0.31, 0), Vector3(0.20, 0.66, 0.23), shirt, "LeftArm")
-	var left_hand := MeshInstance3D.new()
-	var hand_mesh := SphereMesh.new()
-	hand_mesh.radius = 0.11
-	hand_mesh.height = 0.22
-	left_hand.mesh = hand_mesh
-	left_hand.material_override = skin
-	left_hand.position.y = -0.66
-	player_left_arm.add_child(left_hand)
-	player_right_arm = Node3D.new()
-	player_right_arm.position = Vector3(0.43, 1.43, 0)
-	player_visual.add_child(player_right_arm)
-	_mesh_box(player_right_arm, Vector3(0, -0.31, 0), Vector3(0.20, 0.66, 0.23), shirt, "RightArm")
-	var right_hand := MeshInstance3D.new()
-	right_hand.mesh = hand_mesh
-	right_hand.material_override = skin
-	right_hand.position.y = -0.66
-	player_right_arm.add_child(right_hand)
+	var person := _instantiate_person("casual-man")
+	if person:
+		player_visual.add_child(person)
+		player_anim_player = _find_animation_player(person)
+		_play_person_animation(player_anim_player, "idle")
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.36
@@ -241,8 +204,36 @@ func _create_player() -> void:
 	camera.fov = 74
 	spring.add_child(camera)
 
+func _instantiate_person(model_name: String) -> Node3D:
+	var path := "res://assets/people/" + model_name + ".glb"
+	var packed := load(path) as PackedScene
+	if packed == null:
+		push_warning("Missing person model: " + path)
+		return null
+	var instance := packed.instantiate() as Node3D
+	if instance:
+		instance.name = model_name
+	return instance
+
+func _find_animation_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for child in node.get_children():
+		var found := _find_animation_player(child)
+		if found:
+			return found
+	return null
+
+func _play_person_animation(anim_player: AnimationPlayer, wanted: String) -> void:
+	if anim_player == null:
+		return
+	for animation_name in anim_player.get_animation_list():
+		if String(animation_name).to_lower().contains(wanted.to_lower()):
+			if anim_player.current_animation != animation_name:
+				anim_player.play(animation_name)
+			return
+
 func _create_npcs() -> void:
-	# Procedurally built human-shaped pedestrians with articulated limbs.
 	var positions := [
 		Vector3(-125, 0.0, -145), Vector3(-82, 0.0, -128),
 		Vector3(-35, 0.0, -55), Vector3(5, 0.0, -58),
@@ -251,95 +242,22 @@ func _create_npcs() -> void:
 		Vector3(-175, 0.0, 55), Vector3(-195, 0.0, 78),
 		Vector3(55, 0.0, 175), Vector3(95, 0.0, 195)
 	]
-	var clothes := [Color(0.15, 0.38, 0.72), Color(0.78, 0.32, 0.18), Color(0.18, 0.55, 0.35), Color(0.62, 0.42, 0.72), Color(0.85, 0.68, 0.22)]
-	var skin_tones := [Color(0.86, 0.68, 0.53), Color(0.66, 0.45, 0.31), Color(0.43, 0.28, 0.20), Color(0.73, 0.54, 0.40)]
+	var models := ["casual-man", "casual-woman", "business-man", "business-woman", "construction-worker", "doctor", "runner"]
 	for i in range(positions.size()):
 		var npc := Node3D.new()
 		npc.name = "Pedestrian_%02d" % i
 		npc.position = positions[i]
 		add_child(npc)
-		var shirt := _mat(clothes[i % clothes.size()])
-		var skin := _mat(skin_tones[i % skin_tones.size()])
-		var pants := _mat(Color(0.12, 0.16, 0.22))
-		var shoe_mat := _mat(Color(0.045, 0.05, 0.06))
-		var hair := _mat([Color(0.12, 0.075, 0.045), Color(0.25, 0.16, 0.10), Color(0.055, 0.05, 0.045)][i % 3])
-		var torso := MeshInstance3D.new()
-		var torso_mesh := CapsuleMesh.new()
-		torso_mesh.radius = 0.29
-		torso_mesh.height = 0.88
-		torso.mesh = torso_mesh
-		torso.material_override = shirt
-		torso.position = Vector3(0, 1.18, 0)
-		npc.add_child(torso)
-		_mesh_box(npc, Vector3(0, 0.77, 0), Vector3(0.43, 0.30, 0.28), pants, "Pelvis")
-		var neck := MeshInstance3D.new()
-		var neck_mesh := CylinderMesh.new()
-		neck_mesh.top_radius = 0.085
-		neck_mesh.bottom_radius = 0.09
-		neck_mesh.height = 0.16
-		neck.mesh = neck_mesh
-		neck.material_override = skin
-		neck.position.y = 1.68
-		npc.add_child(neck)
-		var head := MeshInstance3D.new()
-		var head_mesh := SphereMesh.new()
-		head_mesh.radius = 0.225
-		head_mesh.height = 0.46
-		head.mesh = head_mesh
-		head.material_override = skin
-		head.position = Vector3(0, 1.86, 0)
-		npc.add_child(head)
-		var hair_cap := MeshInstance3D.new()
-		var hair_mesh := SphereMesh.new()
-		hair_mesh.radius = 0.229
-		hair_mesh.height = 0.25
-		hair_cap.mesh = hair_mesh
-		hair_cap.material_override = hair
-		hair_cap.position = Vector3(0, 2.02, 0.015)
-		npc.add_child(hair_cap)
-		var limb_parts := {}
-		for side in [-1.0, 1.0]:
-			var leg := Node3D.new()
-			leg.position = Vector3(side * 0.15, 0.79, 0)
-			npc.add_child(leg)
-			_npc_capsule(leg, "LegMesh", 0.105, 0.68, Vector3(0, -0.31, 0), pants)
-			_mesh_box(leg, Vector3(0, -0.69, -0.055), Vector3(0.22, 0.14, 0.34), shoe_mat, "Shoe")
-			var arm := Node3D.new()
-			arm.position = Vector3(side * 0.34, 1.48, 0)
-			npc.add_child(arm)
-			_npc_capsule(arm, "ArmMesh", 0.085, 0.60, Vector3(0, -0.24, 0), shirt)
-			var hand := MeshInstance3D.new()
-			var hand_mesh := SphereMesh.new()
-			hand_mesh.radius = 0.09
-			hand_mesh.height = 0.18
-			hand.mesh = hand_mesh
-			hand.material_override = skin
-			hand.position.y = -0.55
-			arm.add_child(hand)
-			if side < 0:
-				limb_parts["left_leg"] = leg
-				limb_parts["left_arm"] = arm
-			else:
-				limb_parts["right_leg"] = leg
-				limb_parts["right_arm"] = arm
+		var person := _instantiate_person(models[i % models.size()])
+		if person:
+			npc.add_child(person)
+			var anim_player := _find_animation_player(person)
+			npc_anim_players[npc.get_instance_id()] = anim_player
+			_play_person_animation(anim_player, "walk")
 		npcs.append(npc)
 		var key := npc.get_instance_id()
-		npc_animation_parts[key] = limb_parts
-		npc_walk_phases[key] = rng.randf_range(0.0, TAU)
 		npc_directions[key] = (1.0 if i % 2 == 0 else -1.0)
 		npc_walk_times[key] = rng.randf_range(2.0, 5.0)
-
-func _npc_capsule(parent: Node3D, node_name: String, radius: float, height: float, pos: Vector3, material: Material) -> MeshInstance3D:
-	var limb := MeshInstance3D.new()
-	var mesh := CapsuleMesh.new()
-	mesh.radius = radius
-	mesh.height = height
-	limb.name = node_name
-	limb.mesh = mesh
-	limb.material_override = material
-	limb.position = pos
-	parent.add_child(limb)
-	return limb
 
 func _create_car() -> void:
 	car = Node3D.new()
@@ -440,20 +358,12 @@ func _move_player(delta: float) -> void:
 		player.velocity.x = direction.x * speed
 		player.velocity.z = direction.z * speed
 		player_visual.rotation.y = lerp_angle(player_visual.rotation.y, atan2(direction.x, direction.z), delta * 10.0)
-		walk_phase += delta * (10.5 if Input.is_key_pressed(KEY_SHIFT) else 7.0)
-		var swing := sin(walk_phase) * (0.78 if Input.is_key_pressed(KEY_SHIFT) else 0.48)
-		player_left_leg.rotation.x = swing
-		player_right_leg.rotation.x = -swing
-		player_left_arm.rotation.x = -swing * 0.72
-		player_right_arm.rotation.x = swing * 0.72
+		_play_person_animation(player_anim_player, "run" if Input.is_key_pressed(KEY_SHIFT) else "walk")
 	else:
 		player.velocity.x = move_toward(player.velocity.x, 0, 24 * delta)
 		player.velocity.z = move_toward(player.velocity.z, 0, 24 * delta)
 		walk_phase = 0.0
-		player_left_leg.rotation.x = lerp_angle(player_left_leg.rotation.x, 0.0, delta * 10.0)
-		player_right_leg.rotation.x = lerp_angle(player_right_leg.rotation.x, 0.0, delta * 10.0)
-		player_left_arm.rotation.x = lerp_angle(player_left_arm.rotation.x, 0.0, delta * 10.0)
-		player_right_arm.rotation.x = lerp_angle(player_right_arm.rotation.x, 0.0, delta * 10.0)
+		_play_person_animation(player_anim_player, "idle")
 	if player.is_on_floor():
 		if Input.is_key_pressed(KEY_SPACE):
 			player.velocity.y = 6.0
@@ -477,17 +387,6 @@ func _update_npcs(delta: float) -> void:
 		npc_walk_times[key] = remaining
 		npc.position.x += direction * 0.75 * delta
 		npc.rotation.y = PI / 2.0 if direction > 0.0 else -PI / 2.0
-		var phase: float = npc_walk_phases.get(key, 0.0) + delta * 5.8
-		npc_walk_phases[key] = phase
-		var swing := sin(phase) * 0.48
-		var parts: Dictionary = npc_animation_parts.get(key, {})
-		if parts.has("left_leg"):
-			(parts["left_leg"] as Node3D).rotation.x = swing
-			(parts["right_leg"] as Node3D).rotation.x = -swing
-			(parts["left_arm"] as Node3D).rotation.x = -swing * 0.72
-			(parts["right_arm"] as Node3D).rotation.x = swing * 0.72
-		npc.position.y = abs(cos(phase * 2.0)) * 0.025
-
 
 func _check_car_pedestrian_collisions() -> void:
 	if abs(car_velocity) < 5.0:
@@ -499,55 +398,17 @@ func _check_car_pedestrian_collisions() -> void:
 func _spawn_npc_ragdoll(npc: Node3D) -> void:
 	_trigger_impact_effect()
 	var origin := npc.global_position
-	var clothes_color := Color(0.18, 0.42, 0.72)
-	var torso_node := npc.get_node_or_null("Torso") as MeshInstance3D
-	if torso_node and torso_node.material_override is StandardMaterial3D:
-		clothes_color = (torso_node.material_override as StandardMaterial3D).albedo_color
-	var skin := _mat(Color(0.66, 0.47, 0.34))
-	var shirt := _mat(clothes_color)
-	var pants := _mat(Color(0.12, 0.16, 0.22))
+	var key := npc.get_instance_id()
 	npcs.erase(npc)
-	npc_directions.erase(npc.get_instance_id())
-	npc_walk_times.erase(npc.get_instance_id())
-	npc_animation_parts.erase(npc.get_instance_id())
-	npc_walk_phases.erase(npc.get_instance_id())
+	npc_directions.erase(key)
+	npc_walk_times.erase(key)
+	npc_anim_players.erase(key)
 	_spawn_impact_sparks(origin + Vector3(0, 0.9, 0))
-	npc.queue_free()
-	var ragdoll := Node3D.new()
-	ragdoll.name = "PedestrianRagdoll"
-	ragdoll.global_position = origin
-	add_child(ragdoll)
-	var pieces := [
-		[Vector3(0, 1.05, 0), Vector3(0.58, 0.82, 0.32), shirt],
-		[Vector3(0, 1.68, 0), Vector3(0.42, 0.42, 0.42), skin],
-		[Vector3(-0.19, 0.43, 0), Vector3(0.19, 0.72, 0.22), pants],
-		[Vector3(0.19, 0.43, 0), Vector3(0.19, 0.72, 0.22), pants],
-		[Vector3(-0.43, 1.08, 0), Vector3(0.18, 0.68, 0.2), skin],
-		[Vector3(0.43, 1.08, 0), Vector3(0.18, 0.68, 0.2), skin]
-	]
-	var push := (car.global_position - origin).normalized()
-	if push.length() < 0.1:
-		push = -car.global_transform.basis.z
-	for piece in pieces:
-		var body := RigidBody3D.new()
-		body.position = piece[0]
-		body.mass = 1.0
-		body.gravity_scale = 1.0
-		ragdoll.add_child(body)
-		var mesh := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		box.size = piece[1]
-		mesh.mesh = box
-		mesh.material_override = piece[2]
-		body.add_child(mesh)
-		var collision := CollisionShape3D.new()
-		var shape := BoxShape3D.new()
-		shape.size = piece[1]
-		collision.shape = shape
-		body.add_child(collision)
-		body.apply_central_impulse(push * clamp(abs(car_velocity) * 0.12, 2.0, 7.0) + Vector3(0, 2.0, 0))
-		body.apply_torque_impulse(Vector3(rng.randf_range(-2, 2), rng.randf_range(-2, 2), rng.randf_range(-2, 2)))
-	get_tree().create_timer(4.0).timeout.connect(ragdoll.queue_free)
+	# Keep the imported human model intact and give it a brief, non-graphic fall reaction.
+	var fall_tween := create_tween()
+	fall_tween.tween_property(npc, "rotation:z", PI * 0.42, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	fall_tween.tween_interval(2.0)
+	fall_tween.tween_callback(npc.queue_free)
 
 func _spawn_impact_sparks(origin: Vector3) -> void:
 	# Abstract red impact particles: decorative game feedback, not injury detail.
