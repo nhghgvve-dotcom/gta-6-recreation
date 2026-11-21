@@ -265,11 +265,28 @@ func _play_person_animation(anim_player: AnimationPlayer, wanted: String) -> voi
 			return
 
 func _create_weapon_visual() -> void:
-	# A deliberately fictional, neon energy tool rather than a realistic firearm.
+	# Attach the fictional energy emitter to the animated character's right hand.
 	weapon_visual = Node3D.new()
 	weapon_visual.name = "ArcadeEnergyEmitter"
-	weapon_visual.position = Vector3(0.42, -0.32, -0.82)
-	camera.add_child(weapon_visual)
+	var skeleton := _find_skeleton(player_visual)
+	var hand_bone := -1
+	if skeleton:
+		for i in range(skeleton.get_bone_count()):
+			var bone_name := skeleton.get_bone_name(i).to_lower()
+			if bone_name.contains("right") and (bone_name.contains("hand") or bone_name.contains("wrist")):
+				hand_bone = i
+				break
+	if skeleton and hand_bone >= 0:
+		var hand_attachment := BoneAttachment3D.new()
+		hand_attachment.name = "RightHandWeaponAttachment"
+		hand_attachment.bone_name = skeleton.get_bone_name(hand_bone)
+		skeleton.add_child(hand_attachment)
+		hand_attachment.add_child(weapon_visual)
+		weapon_visual.position = Vector3(0.045, 0.015, -0.035)
+	else:
+		player_visual.add_child(weapon_visual)
+		weapon_visual.position = Vector3(0.28, 1.05, -0.28)
+		push_warning("Right-hand bone not found; using character-side attachment.")
 	var body_mat := _mat(Color(0.055, 0.12, 0.17), 0.28, 0.55)
 	var glow_mat := StandardMaterial3D.new()
 	glow_mat.albedo_color = Color(0.08, 0.8, 1.0)
@@ -280,6 +297,15 @@ func _create_weapon_visual() -> void:
 	_mesh_box(weapon_visual, Vector3(0, 0.015, -0.28), Vector3(0.11, 0.11, 0.22), glow_mat, "EnergyCoil")
 	_mesh_box(weapon_visual, Vector3(0, -0.13, 0.08), Vector3(0.12, 0.22, 0.14), body_mat, "Grip")
 	weapon_visual.visible = selected_weapon != "FISTS"
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node as Skeleton3D
+	for child in node.get_children():
+		var found := _find_skeleton(child)
+		if found:
+			return found
+	return null
 
 func _create_weapon_menu() -> void:
 	weapon_menu_layer = CanvasLayer.new()
@@ -384,7 +410,7 @@ func _fire_selected_weapon() -> void:
 	mat.emission = mat.albedo_color
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	bolt.material_override = mat
-	var origin := camera.global_position + (-camera.global_transform.basis.z * 1.1) + (camera.global_transform.basis.x * 0.25) + (camera.global_transform.basis.y * -0.18)
+	var origin := weapon_visual.global_position + (-camera.global_transform.basis.z * 0.42)
 	bolt.global_position = origin
 	add_child(bolt)
 	var destination := origin + (-camera.global_transform.basis.z * 48.0)
