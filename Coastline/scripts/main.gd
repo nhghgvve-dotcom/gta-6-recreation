@@ -656,7 +656,7 @@ func _exit_car() -> void:
 	# in world space beside the moving car; restore its local offset on exit so
 	# the car's distance from the original spawn can never create a huge offset.
 	camera_pivot.position = Vector3(0, 1.45, 0)
-	camera_pivot.rotation = Vector3(-0.12, player.rotation.y, 0)
+	camera_pivot.rotation = Vector3(-0.12, 0.0, 0)
 	camera_spring.spring_length = 6.0
 	camera.fov = 74.0
 	car_velocity = 0.0
@@ -664,9 +664,9 @@ func _exit_car() -> void:
 func _update_camera() -> void:
 	if driving:
 		camera_pivot.global_position = car.global_position + Vector3(0, 1.9, 0)
-		camera_pivot.rotation.y = car_yaw
+		camera_pivot.rotation.y = car_yaw - player.rotation.y
 	else:
-		# Keep the on-foot camera attached at a fixed local offset, independent
-		# of how far the vehicle has travelled from the starting point.
+		# The player root already carries the mouse-look yaw. Keeping the child
+		# pivot at zero avoids doubling the camera rotation and skewing controls.
 		camera_pivot.position = Vector3(0, 1.45, 0)
-		camera_pivot.rotation.y = player.rotation.y
+		camera_pivot.rotation.y = 0.0
