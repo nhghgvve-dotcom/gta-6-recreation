@@ -268,6 +268,7 @@ func _create_player() -> void:
 	camera_pivot.add_child(spring)
 	camera = Camera3D.new()
 	camera.fov = 70
+	camera.current = true
 	spring.add_child(camera)
 
 func _create_car() -> void:
