@@ -135,6 +135,19 @@ func _build_world() -> void:
 				var w := rng.randf_range(16, 30)
 				var d := rng.randf_range(16, 30)
 				var h := rng.randf_range(12, 52)
+				# Keep building footprints out of every road corridor and its safety margin.
+				var overlaps_road := false
+				for road_z in [-180.0, -90.0, 0.0, 90.0, 180.0]:
+					if abs(bz - road_z) < ROAD_WIDTH * 0.5 + d * 0.5 + 4.0:
+						overlaps_road = true
+						break
+				if not overlaps_road:
+					for road_x in [-150.0, -60.0, 30.0, 120.0, 210.0]:
+						if abs(bx - road_x) < ROAD_WIDTH * 0.5 + w * 0.5 + 4.0:
+							overlaps_road = true
+							break
+				if overlaps_road:
+					continue
 				var palette := [Color(0.78, 0.72, 0.61), Color(0.69, 0.74, 0.73), Color(0.84, 0.82, 0.74), Color(0.53, 0.62, 0.64), Color(0.78, 0.63, 0.49)]
 				var building_mat := _mat(palette[rng.randi_range(0, palette.size() - 1)], 0.74)
 				_static_box(self, Vector3(bx, h * 0.5, bz), Vector3(w, h, d), building_mat)
@@ -176,11 +189,11 @@ func _create_palm(pos: Vector3) -> void:
 func _create_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
-	player.position = Vector3(5, 0.93, 12)
+	player.position = Vector3(-8, 0.725, 0)
 	add_child(player)
 	player_visual = Node3D.new()
 	player_visual.name = "PlayerModel"
-	player_visual.position.y = -0.93
+	player_visual.position.y = -0.925
 	player.add_child(player_visual)
 	var person := _instantiate_person("casual-man")
 	if person:
