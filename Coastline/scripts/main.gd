@@ -94,7 +94,7 @@ func _build_world() -> void:
 	var white := _mat(Color(0.91, 0.90, 0.80))
 	var yellow := _mat(Color(0.95, 0.73, 0.22))
 	var ocean := _mat(Color(0.035, 0.36, 0.51), 0.24, 0.18)
-	_mesh_box(self, Vector3(0, -1.2, 0), Vector3(WORLD_SIZE, 2, WORLD_SIZE), grass, "Island")
+	_static_box(self, Vector3(0, -1.2, 0), Vector3(WORLD_SIZE, 2, WORLD_SIZE), grass)
 	_mesh_box(self, Vector3(-WORLD_SIZE * 0.5 - 35, -1.4, 0), Vector3(110, 1, WORLD_SIZE + 100), ocean, "Ocean")
 	_mesh_box(self, Vector3(-WORLD_SIZE * 0.5 + 18, -0.48, 0), Vector3(42, 0.35, WORLD_SIZE + 10), sand, "Beach")
 	for z in [-180.0, -90.0, 0.0, 90.0, 180.0]:
@@ -156,43 +156,116 @@ func _create_palm(pos: Vector3) -> void:
 		leaf.rotation.x = -0.18
 		add_child(leaf)
 
+func _make_capsule(parent: Node3D, pos: Vector3, radius: float, height: float, material: Material, node_name: String) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = node_name
+	var mesh := CapsuleMesh.new()
+	mesh.radius = radius
+	mesh.height = height
+	part.mesh = mesh
+	part.material_override = material
+	part.position = pos
+	parent.add_child(part)
+	return part
+
 func _create_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
-	player.position = Vector3(5, 1.1, 12)
+	# CharacterBody origin is at the capsule centre; the island top is y=-0.2.
+	player.position = Vector3(5, 0.72, 12)
+	player.floor_snap_length = 0.35
+	player.floor_max_angle = deg_to_rad(48.0)
 	add_child(player)
-	var capsule := CapsuleMesh.new()
-	capsule.radius = 0.42
-	capsule.height = 1.8
+
 	player_visual = Node3D.new()
+	player_visual.name = "HumanCharacter"
 	player.add_child(player_visual)
-	var body_mesh := MeshInstance3D.new()
-	body_mesh.mesh = capsule
-	body_mesh.material_override = _mat(Color(0.13, 0.25, 0.42))
-	player_visual.add_child(body_mesh)
+
+	var skin := _mat(Color(0.68, 0.46, 0.32), 0.72)
+	var shirt := _mat(Color(0.10, 0.22, 0.34), 0.78)
+	var trousers := _mat(Color(0.075, 0.095, 0.12), 0.88)
+	var shoes := _mat(Color(0.025, 0.03, 0.035), 0.9)
+	var hair := _mat(Color(0.055, 0.035, 0.025), 0.95)
+	var eye_mat := _mat(Color(0.025, 0.018, 0.012), 0.45)
+
+	# Torso, neck and head create a recognisable human silhouette.
+	_make_capsule(player_visual, Vector3(0, 1.02, 0), 0.255, 0.78, shirt, "Torso")
+	var neck := MeshInstance3D.new()
+	var neck_mesh := CylinderMesh.new()
+	neck_mesh.top_radius = 0.085
+	neck_mesh.bottom_radius = 0.10
+	neck_mesh.height = 0.16
+	neck.mesh = neck_mesh
+	neck.material_override = skin
+	neck.position = Vector3(0, 1.43, 0)
+	player_visual.add_child(neck)
+
 	var head := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.28
-	sphere.height = 0.56
-	head.mesh = sphere
-	head.material_override = _mat(Color(0.72, 0.52, 0.38))
-	head.position.y = 1.05
+	var head_mesh := SphereMesh.new()
+	head_mesh.radius = 0.17
+	head_mesh.height = 0.36
+	head.mesh = head_mesh
+	head.material_override = skin
+	head.position = Vector3(0, 1.68, 0)
 	player_visual.add_child(head)
+
+	var hair_cap := MeshInstance3D.new()
+	var hair_mesh := SphereMesh.new()
+	hair_mesh.radius = 0.176
+	hair_mesh.height = 0.19
+	hair_cap.mesh = hair_mesh
+	hair_cap.material_override = hair
+	hair_cap.position = Vector3(0, 1.79, -0.015)
+	player_visual.add_child(hair_cap)
+
+	# Small facial details face the character's forward direction (-Z).
+	for eye_x in [-0.065, 0.065]:
+		var eye := MeshInstance3D.new()
+		var eye_mesh := SphereMesh.new()
+		eye_mesh.radius = 0.018
+		eye_mesh.height = 0.025
+		eye.mesh = eye_mesh
+		eye.material_override = eye_mat
+		eye.position = Vector3(eye_x, 1.70, -0.158)
+		player_visual.add_child(eye)
+
+	# Separate upper arms, forearms, thighs and lower legs.
+	for side in [-1.0, 1.0]:
+		var upper_arm := _make_capsule(player_visual, Vector3(side * 0.31, 1.10, 0), 0.095, 0.43, shirt, "UpperArm")
+		upper_arm.rotation.z = side * -0.12
+		var forearm := _make_capsule(player_visual, Vector3(side * 0.36, 0.76, -0.015), 0.075, 0.34, skin, "Forearm")
+		forearm.rotation.z = side * -0.08
+		var hand := MeshInstance3D.new()
+		var hand_mesh := SphereMesh.new()
+		hand_mesh.radius = 0.085
+		hand_mesh.height = 0.13
+		hand.mesh = hand_mesh
+		hand.material_override = skin
+		hand.position = Vector3(side * 0.38, 0.57, -0.015)
+		player_visual.add_child(hand)
+
+		var thigh := _make_capsule(player_visual, Vector3(side * 0.13, 0.39, 0), 0.125, 0.48, trousers, "Thigh")
+		var shin := _make_capsule(player_visual, Vector3(side * 0.13, 0.075, -0.015), 0.095, 0.38, trousers, "LowerLeg")
+		var shoe := _mesh_box(player_visual, Vector3(side * 0.13, -0.12, -0.075), Vector3(0.19, 0.12, 0.32), shoes, "Shoe")
+		shoe.rotation.x = 0.04
+
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-	shape.radius = 0.42
+	shape.radius = 0.34
 	shape.height = 1.8
 	collision.shape = shape
+	collision.position.y = 0.9
 	player.add_child(collision)
+
 	camera_pivot = Node3D.new()
-	camera_pivot.position = Vector3(0, 1.45, 0)
+	camera_pivot.position = Vector3(0, 1.48, 0)
 	player.add_child(camera_pivot)
 	var spring := SpringArm3D.new()
-	spring.spring_length = 6.0
+	spring.spring_length = 5.4
 	spring.margin = 0.25
 	camera_pivot.add_child(spring)
 	camera = Camera3D.new()
-	camera.fov = 74
+	camera.fov = 70
 	spring.add_child(camera)
 
 func _create_car() -> void:
