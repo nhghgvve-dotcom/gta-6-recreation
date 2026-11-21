@@ -40,5 +40,5 @@ jobs:
           name: Coastline-Windows
           path: |
             Coastline/build/Coastline.exe
-            Coastline/build/Coastline.exe.pck
+            Coastline/build/Coastline.pck
           if-no-files-found: error
