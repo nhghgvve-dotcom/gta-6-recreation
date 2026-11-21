@@ -7,6 +7,11 @@ const CAR_SPEED := 34.0
 
 var player: CharacterBody3D
 var player_visual: Node3D
+var player_left_leg: Node3D
+var player_right_leg: Node3D
+var player_left_arm: Node3D
+var player_right_arm: Node3D
+var walk_phase := 0.0
 var camera_pivot: Node3D
 var camera: Camera3D
 var car: Node3D
@@ -98,7 +103,7 @@ func _build_world() -> void:
 	var white := _mat(Color(0.91, 0.90, 0.80))
 	var yellow := _mat(Color(0.95, 0.73, 0.22))
 	var ocean := _mat(Color(0.035, 0.36, 0.51), 0.24, 0.18)
-	_mesh_box(self, Vector3(0, -1.2, 0), Vector3(WORLD_SIZE, 2, WORLD_SIZE), grass, "Island")
+	_static_box(self, Vector3(0, -1.2, 0), Vector3(WORLD_SIZE, 2, WORLD_SIZE), grass)
 	_mesh_box(self, Vector3(-WORLD_SIZE * 0.5 - 35, -1.4, 0), Vector3(110, 1, WORLD_SIZE + 100), ocean, "Ocean")
 	_mesh_box(self, Vector3(-WORLD_SIZE * 0.5 + 18, -0.48, 0), Vector3(42, 0.35, WORLD_SIZE + 10), sand, "Beach")
 	for z in [-180.0, -90.0, 0.0, 90.0, 180.0]:
@@ -163,29 +168,59 @@ func _create_palm(pos: Vector3) -> void:
 func _create_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
-	player.position = Vector3(5, 1.1, 12)
+	player.position = Vector3(5, 0.76, 12)
 	add_child(player)
-	var capsule := CapsuleMesh.new()
-	capsule.radius = 0.42
-	capsule.height = 1.8
 	player_visual = Node3D.new()
+	player_visual.name = "PlayerModel"
 	player.add_child(player_visual)
-	var body_mesh := MeshInstance3D.new()
-	body_mesh.mesh = capsule
-	body_mesh.material_override = _mat(Color(0.13, 0.25, 0.42))
-	player_visual.add_child(body_mesh)
+	var shirt := _mat(Color(0.12, 0.30, 0.58))
+	var skin := _mat(Color(0.72, 0.52, 0.38))
+	var pants := _mat(Color(0.10, 0.14, 0.21))
+	var shoes := _mat(Color(0.035, 0.04, 0.05))
+	_mesh_box(player_visual, Vector3(0, 1.12, 0), Vector3(0.66, 0.82, 0.34), shirt, "Torso")
 	var head := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.28
-	sphere.height = 0.56
-	head.mesh = sphere
-	head.material_override = _mat(Color(0.72, 0.52, 0.38))
-	head.position.y = 1.05
+	var head_mesh := SphereMesh.new()
+	head_mesh.radius = 0.25
+	head_mesh.height = 0.5
+	head.mesh = head_mesh
+	head.material_override = skin
+	head.position.y = 1.78
 	player_visual.add_child(head)
+	player_left_leg = Node3D.new()
+	player_left_leg.position = Vector3(-0.19, 0.78, 0)
+	player_visual.add_child(player_left_leg)
+	_mesh_box(player_left_leg, Vector3(0, -0.36, 0), Vector3(0.23, 0.72, 0.25), pants, "LeftLeg")
+	_mesh_box(player_left_leg, Vector3(0, -0.70, -0.055), Vector3(0.25, 0.16, 0.38), shoes, "LeftShoe")
+	player_right_leg = Node3D.new()
+	player_right_leg.position = Vector3(0.19, 0.78, 0)
+	player_visual.add_child(player_right_leg)
+	_mesh_box(player_right_leg, Vector3(0, -0.36, 0), Vector3(0.23, 0.72, 0.25), pants, "RightLeg")
+	_mesh_box(player_right_leg, Vector3(0, -0.70, -0.055), Vector3(0.25, 0.16, 0.38), shoes, "RightShoe")
+	player_left_arm = Node3D.new()
+	player_left_arm.position = Vector3(-0.43, 1.43, 0)
+	player_visual.add_child(player_left_arm)
+	_mesh_box(player_left_arm, Vector3(0, -0.31, 0), Vector3(0.20, 0.66, 0.23), shirt, "LeftArm")
+	var left_hand := MeshInstance3D.new()
+	var hand_mesh := SphereMesh.new()
+	hand_mesh.radius = 0.11
+	hand_mesh.height = 0.22
+	left_hand.mesh = hand_mesh
+	left_hand.material_override = skin
+	left_hand.position.y = -0.66
+	player_left_arm.add_child(left_hand)
+	player_right_arm = Node3D.new()
+	player_right_arm.position = Vector3(0.43, 1.43, 0)
+	player_visual.add_child(player_right_arm)
+	_mesh_box(player_right_arm, Vector3(0, -0.31, 0), Vector3(0.20, 0.66, 0.23), shirt, "RightArm")
+	var right_hand := MeshInstance3D.new()
+	right_hand.mesh = hand_mesh
+	right_hand.material_override = skin
+	right_hand.position.y = -0.66
+	player_right_arm.add_child(right_hand)
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-	shape.radius = 0.42
-	shape.height = 1.8
+	shape.radius = 0.36
+	shape.height = 1.85
 	collision.shape = shape
 	player.add_child(collision)
 	camera_pivot = Node3D.new()
@@ -325,9 +360,20 @@ func _move_player(delta: float) -> void:
 		player.velocity.x = direction.x * speed
 		player.velocity.z = direction.z * speed
 		player_visual.rotation.y = lerp_angle(player_visual.rotation.y, atan2(direction.x, direction.z), delta * 10.0)
+		walk_phase += delta * (10.5 if Input.is_key_pressed(KEY_SHIFT) else 7.0)
+		var swing := sin(walk_phase) * (0.78 if Input.is_key_pressed(KEY_SHIFT) else 0.48)
+		player_left_leg.rotation.x = swing
+		player_right_leg.rotation.x = -swing
+		player_left_arm.rotation.x = -swing * 0.72
+		player_right_arm.rotation.x = swing * 0.72
 	else:
 		player.velocity.x = move_toward(player.velocity.x, 0, 24 * delta)
 		player.velocity.z = move_toward(player.velocity.z, 0, 24 * delta)
+		walk_phase = 0.0
+		player_left_leg.rotation.x = lerp_angle(player_left_leg.rotation.x, 0.0, delta * 10.0)
+		player_right_leg.rotation.x = lerp_angle(player_right_leg.rotation.x, 0.0, delta * 10.0)
+		player_left_arm.rotation.x = lerp_angle(player_left_arm.rotation.x, 0.0, delta * 10.0)
+		player_right_arm.rotation.x = lerp_angle(player_right_arm.rotation.x, 0.0, delta * 10.0)
 	if player.is_on_floor():
 		if Input.is_key_pressed(KEY_SPACE):
 			player.velocity.y = 6.0
