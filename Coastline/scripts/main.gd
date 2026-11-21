@@ -487,9 +487,9 @@ func _update_impact_effects(delta: float) -> void:
 	else:
 		camera.rotation = Vector3.ZERO
 	if impact_flash_time > 0.0:
-		impact_overlay.color.a = 0.30 * (impact_flash_time / 0.32)
+		impact_overlay.color = Color(0.72, 0.015, 0.025, 0.30 * (impact_flash_time / 0.32))
 	else:
-		impact_overlay.color.a = 0.0
+		impact_overlay.color = Color(0.72, 0.015, 0.025, 0.0)
 
 func _drive_car(delta: float) -> void:
 	var throttle := float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S))
