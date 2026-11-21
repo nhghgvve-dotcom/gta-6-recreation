@@ -38,6 +38,11 @@ var npc_directions: Dictionary = {}
 var npc_walk_times: Dictionary = {}
 var npc_animation_parts: Dictionary = {}
 var npc_walk_phases: Dictionary = {}
+var weapon_menu_open := false
+var selected_weapon := "FISTS"
+var weapon_menu_layer: CanvasLayer
+var weapon_visual: Node3D
+var fire_cooldown := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -228,6 +233,7 @@ func _create_player() -> void:
 	camera = Camera3D.new()
 	camera.fov = 74
 	camera_spring.add_child(camera)
+	_create_weapon_visual()
 
 func _instantiate_person(model_name: String) -> Node3D:
 	var path := "res://assets/people/" + model_name + ".glb"
@@ -257,6 +263,134 @@ func _play_person_animation(anim_player: AnimationPlayer, wanted: String) -> voi
 			if anim_player.current_animation != animation_name:
 				anim_player.play(animation_name)
 			return
+
+func _create_weapon_visual() -> void:
+	# A deliberately fictional, neon energy tool rather than a realistic firearm.
+	weapon_visual = Node3D.new()
+	weapon_visual.name = "ArcadeEnergyEmitter"
+	weapon_visual.position = Vector3(0.42, -0.32, -0.82)
+	camera.add_child(weapon_visual)
+	var body_mat := _mat(Color(0.055, 0.12, 0.17), 0.28, 0.55)
+	var glow_mat := StandardMaterial3D.new()
+	glow_mat.albedo_color = Color(0.08, 0.8, 1.0)
+	glow_mat.emission_enabled = true
+	glow_mat.emission = Color(0.02, 0.65, 1.0)
+	glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_mesh_box(weapon_visual, Vector3(0, 0, 0), Vector3(0.16, 0.16, 0.48), body_mat, "EmitterBody")
+	_mesh_box(weapon_visual, Vector3(0, 0.015, -0.28), Vector3(0.11, 0.11, 0.22), glow_mat, "EnergyCoil")
+	_mesh_box(weapon_visual, Vector3(0, -0.13, 0.08), Vector3(0.12, 0.22, 0.14), body_mat, "Grip")
+	weapon_visual.visible = selected_weapon != "FISTS"
+
+func _create_weapon_menu() -> void:
+	weapon_menu_layer = CanvasLayer.new()
+	weapon_menu_layer.name = "WeaponWheel"
+	weapon_menu_layer.layer = 15
+	weapon_menu_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(weapon_menu_layer)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.005, 0.012, 0.025, 0.72)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	weapon_menu_layer.add_child(dim)
+	var wheel := Control.new()
+	wheel.set_anchors_preset(Control.PRESET_CENTER)
+	wheel.position = Vector2(-215, -215)
+	wheel.size = Vector2(430, 430)
+	dim.add_child(wheel)
+	var ring := Panel.new()
+	ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var ring_style := StyleBoxFlat.new()
+	ring_style.bg_color = Color(0.035, 0.075, 0.11, 0.94)
+	ring_style.border_color = Color(0.22, 0.72, 0.86, 0.95)
+	ring_style.set_border_width_all(3)
+	ring_style.set_corner_radius_all(215)
+	ring.add_theme_stylebox_override("panel", ring_style)
+	wheel.add_child(ring)
+	var title := Label.new()
+	title.text = "WEAPON SELECT"
+	title.position = Vector2(110, 76)
+	title.size = Vector2(210, 32)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color(0.88, 0.97, 1.0))
+	wheel.add_child(title)
+	var hint := Label.new()
+	hint.text = "HOLD K  •  CLICK A SLOT"
+	hint.position = Vector2(105, 324)
+	hint.size = Vector2(220, 28)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_color_override("font_color", Color(0.55, 0.72, 0.82))
+	wheel.add_child(hint)
+	var fists := _make_weapon_button("FISTS", "Unarmed")
+	fists.position = Vector2(34, 174)
+	fists.pressed.connect(_select_weapon.bind("FISTS"))
+	wheel.add_child(fists)
+	var pulse := _make_weapon_button("PULSE", "Energy")
+	pulse.position = Vector2(235, 174)
+	pulse.pressed.connect(_select_weapon.bind("PULSE"))
+	wheel.add_child(pulse)
+	var arc := _make_weapon_button("ARC", "Arc bolts")
+	arc.position = Vector2(135, 258)
+	arc.pressed.connect(_select_weapon.bind("ARC"))
+	wheel.add_child(arc)
+	weapon_menu_layer.visible = false
+
+func _make_weapon_button(caption: String, subcaption: String) -> Button:
+	var button := Button.new()
+	button.text = caption + "\n" + subcaption
+	button.custom_minimum_size = Vector2(160, 66)
+	button.add_theme_font_size_override("font_size", 17)
+	button.add_theme_color_override("font_color", Color(0.91, 0.98, 1.0))
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.08, 0.15, 0.21, 0.98)
+	normal.border_color = Color(0.19, 0.43, 0.55)
+	normal.set_border_width_all(2)
+	normal.set_corner_radius_all(12)
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = Color(0.08, 0.32, 0.4, 1.0)
+	hover.border_color = Color(0.25, 0.85, 1.0)
+	hover.set_border_width_all(3)
+	hover.set_corner_radius_all(12)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	return button
+
+func _select_weapon(weapon_name: String) -> void:
+	selected_weapon = weapon_name
+	if is_instance_valid(weapon_visual):
+		weapon_visual.visible = selected_weapon != "FISTS"
+	if weapon_menu_open:
+		weapon_menu_layer.visible = false
+		weapon_menu_open = false
+		mouse_captured = true
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_update_hud()
+
+func _fire_selected_weapon() -> void:
+	if selected_weapon == "FISTS":
+		return
+	# Fire a harmless stylized energy effect into the environment.
+	fire_cooldown = 0.22 if selected_weapon == "PULSE" else 0.42
+	var bolt := MeshInstance3D.new()
+	var orb := SphereMesh.new()
+	orb.radius = 0.095 if selected_weapon == "PULSE" else 0.15
+	orb.height = orb.radius * 2.0
+	bolt.mesh = orb
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.05, 0.82, 1.0) if selected_weapon == "PULSE" else Color(0.55, 0.25, 1.0)
+	mat.emission_enabled = true
+	mat.emission = mat.albedo_color
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bolt.material_override = mat
+	var origin := camera.global_position + (-camera.global_transform.basis.z * 1.1) + (camera.global_transform.basis.x * 0.25) + (camera.global_transform.basis.y * -0.18)
+	bolt.global_position = origin
+	add_child(bolt)
+	var destination := origin + (-camera.global_transform.basis.z * 48.0)
+	var tween := create_tween()
+	tween.tween_property(bolt, "global_position", destination, 0.7).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_callback(bolt.queue_free)
 
 func _create_npcs() -> void:
 	var positions := [
@@ -338,6 +472,7 @@ func _create_hud() -> void:
 	impact_overlay.z_index = 100
 	layer.add_child(impact_overlay)
 	_create_pause_menu()
+	_create_weapon_menu()
 	_update_hud()
 
 func _create_pause_menu() -> void:
@@ -457,18 +592,32 @@ func _quit_game() -> void:
 func _update_hud() -> void:
 	hud.text = "COASTLINE  |  FREE ROAM"
 	if driving:
-		help_label.text = "WASD Drive   •   Mouse Look   •   E Exit   •   ESC Release Mouse"
+		help_label.text = "WASD Drive   •   Mouse Look   •   E Exit   •   K Weapon Wheel"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
 	else:
-		help_label.text = "WASD Move   •   Shift Run   •   Space Jump   •   E Enter Car   •   Mouse Look   •   ESC Mouse"
+		help_label.text = "WASD Move   •   Shift Run   •   Space Jump   •   E Car   •   K Weapon Wheel   •   LMB Fire"
 		speed_label.text = "ON FOOT"
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_K:
+		if event.pressed and not event.echo and not is_paused:
+			weapon_menu_open = true
+			weapon_menu_layer.visible = true
+			mouse_captured = false
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			get_viewport().set_input_as_handled()
+		elif not event.pressed and weapon_menu_open:
+			weapon_menu_open = false
+			weapon_menu_layer.visible = false
+			mouse_captured = true
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
 		_set_paused(not is_paused)
 		get_viewport().set_input_as_handled()
 		return
-	if is_paused:
+	if is_paused or weapon_menu_open:
 		return
 	if event is InputEventMouseMotion and mouse_captured:
 		if driving:
@@ -487,10 +636,13 @@ func _physics_process(delta: float) -> void:
 	if is_paused:
 		return
 	_update_npcs(delta)
+	fire_cooldown = max(0.0, fire_cooldown - delta)
 	if driving:
 		_drive_car(delta)
 	else:
 		_move_player(delta)
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and fire_cooldown <= 0.0:
+			_fire_selected_weapon()
 	_update_camera()
 	_update_impact_effects(delta)
 	_update_hud()
