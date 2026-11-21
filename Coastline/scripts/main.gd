@@ -172,6 +172,7 @@ func _create_player() -> void:
 	add_child(player)
 	player_visual = Node3D.new()
 	player_visual.name = "PlayerModel"
+	player_visual.position.y = -0.96 # Align the model feet with the capsule and island surface.
 	player.add_child(player_visual)
 	var shirt := _mat(Color(0.12, 0.30, 0.58))
 	var skin := _mat(Color(0.72, 0.52, 0.38))
