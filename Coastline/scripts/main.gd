@@ -7,8 +7,9 @@ const CAR_SPEED := 34.0
 
 var player: CharacterBody3D
 var player_visual: Node3D
-var camera_pivot: Node3D
 var camera: Camera3D
+var camera_yaw := 0.0
+var camera_pitch := -0.22
 var car: Node3D
 var driving := false
 var car_velocity := 0.0
@@ -259,21 +260,17 @@ func _create_player() -> void:
 	collision.position.y = 0.9
 	player.add_child(collision)
 
-	camera_pivot = Node3D.new()
-	camera_pivot.position = Vector3(0, 1.48, 0)
-	player.add_child(camera_pivot)
-	var spring := SpringArm3D.new()
-	spring.spring_length = 5.4
-	spring.margin = 0.25
-	# Place the camera behind the character, who faces -Z.
-	spring.rotation.y = PI
-	camera_pivot.add_child(spring)
+	# Version 2 camera: independent camera node, no SpringArm transform chain.
+	# This avoids the blank-sky view caused by nested camera transforms.
 	camera = Camera3D.new()
-	camera.fov = 70
-	# Counter-rotate so the camera looks back toward the character.
-	camera.rotation.y = PI
-	spring.add_child(camera)
+	camera.name = "GameplayCamera"
+	camera.fov = 72.0
+	camera.near = 0.1
+	camera.far = 900.0
+	add_child(camera)
 	camera.make_current()
+	camera_yaw = player.rotation.y
+	_update_camera()
 
 func _create_car() -> void:
 	car = Node3D.new()
@@ -324,7 +321,7 @@ func _create_hud() -> void:
 	_update_hud()
 
 func _update_hud() -> void:
-	hud.text = "COASTLINE  |  FREE ROAM"
+	hud.text = "COASTLINE 2.0  |  FREE ROAM"
 	if driving:
 		help_label.text = "WASD Drive   •   Mouse Look   •   E Exit   •   ESC Release Mouse"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
@@ -339,10 +336,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and mouse_captured:
 		if driving:
 			car_yaw -= event.relative.x * 0.0025
-			camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - event.relative.y * 0.002, -0.45, 0.25)
+			camera_pitch = clamp(camera_pitch - event.relative.y * 0.002, -0.75, 0.25)
 		else:
-			player.rotation.y -= event.relative.x * 0.0025
-			camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - event.relative.y * 0.002, -0.65, 0.35)
+			camera_yaw -= event.relative.x * 0.0025
+			player.rotation.y = camera_yaw
+			camera_pitch = clamp(camera_pitch - event.relative.y * 0.002, -0.75, 0.25)
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
 		if driving:
 			_exit_car()
@@ -395,7 +393,7 @@ func _enter_car() -> void:
 	driving = true
 	player.visible = false
 	car_yaw = car.rotation.y
-	camera_pivot.rotation.x = -0.12
+	camera_pitch = -0.18
 
 func _exit_car() -> void:
 	driving = false
@@ -405,8 +403,16 @@ func _exit_car() -> void:
 	car_velocity = 0.0
 
 func _update_camera() -> void:
+	if camera == null:
+		return
+	var target: Vector3
+	var distance := 7.0
 	if driving:
-		camera_pivot.global_position = car.global_position + Vector3(0, 1.9, 0)
-		camera_pivot.rotation.y = car_yaw
+		target = car.global_position + Vector3(0, 1.35, 0)
+		camera_yaw = car_yaw
+		distance = 9.0
 	else:
-		camera_pivot.rotation.y = player.rotation.y
+		target = player.global_position + Vector3(0, 1.35, 0)
+	var horizontal := Vector3(sin(camera_yaw), 0.0, cos(camera_yaw)) * distance
+	camera.global_position = target + horizontal + Vector3(0, 2.0 + camera_pitch * 3.0, 0)
+	camera.look_at(target, Vector3.UP)
