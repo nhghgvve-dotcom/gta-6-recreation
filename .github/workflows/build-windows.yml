@@ -27,7 +27,7 @@ jobs:
       - name: Export Windows build
         run: |
           mkdir -p Coastline/build
-          godot --headless --path Coastline --export-release "Windows Desktop" Coastline/build/Coastline.exe
+          godot --headless --path Coastline --export-release "Windows Desktop" build/Coastline.exe
 
       - name: Verify exported files
         run: |
