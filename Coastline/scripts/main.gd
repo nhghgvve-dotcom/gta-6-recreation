@@ -43,9 +43,6 @@ var selected_weapon := "FISTS"
 var weapon_menu_layer: CanvasLayer
 var weapon_visual: Node3D
 var fire_cooldown := 0.0
-var active_bolts: Array[Area3D] = []
-var bolt_velocities: Dictionary = {}
-var bolt_ages: Dictionary = {}
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -400,102 +397,26 @@ func _select_weapon(weapon_name: String) -> void:
 func _fire_selected_weapon() -> void:
 	if selected_weapon == "FISTS":
 		return
-	# Fictional energy bolts travel forward and can tag pedestrian hit areas.
+	# Fire a harmless stylized energy effect into the environment.
 	fire_cooldown = 0.22 if selected_weapon == "PULSE" else 0.42
-	var bolt := Area3D.new()
-	bolt.name = "EnergyBolt"
-	bolt.collision_layer = 0
-	bolt.collision_mask = 2
-	bolt.monitoring = true
-	bolt.monitorable = false
-	var orb := MeshInstance3D.new()
-	var orb_mesh := SphereMesh.new()
-	orb_mesh.radius = 0.095 if selected_weapon == "PULSE" else 0.15
-	orb_mesh.height = orb_mesh.radius * 2.0
-	orb.mesh = orb_mesh
+	var bolt := MeshInstance3D.new()
+	var orb := SphereMesh.new()
+	orb.radius = 0.095 if selected_weapon == "PULSE" else 0.15
+	orb.height = orb.radius * 2.0
+	bolt.mesh = orb
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.05, 0.82, 1.0) if selected_weapon == "PULSE" else Color(0.55, 0.25, 1.0)
 	mat.emission_enabled = true
 	mat.emission = mat.albedo_color
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	orb.material_override = mat
-	bolt.add_child(orb)
-	var hit_shape := CollisionShape3D.new()
-	var sphere := SphereShape3D.new()
-	sphere.radius = 0.22
-	hit_shape.shape = sphere
-	bolt.add_child(hit_shape)
-	var direction := -camera.global_transform.basis.z.normalized()
-	var origin := weapon_visual.global_position + direction * 0.42
+	bolt.material_override = mat
+	var origin := weapon_visual.global_position + (-camera.global_transform.basis.z * 0.42)
 	bolt.global_position = origin
 	add_child(bolt)
-	var bolt_id := bolt.get_instance_id()
-	bolt_velocities[bolt_id] = direction * (62.0 if selected_weapon == "PULSE" else 48.0)
-	bolt_ages[bolt_id] = 0.0
-	active_bolts.append(bolt)
-	bolt.area_entered.connect(_on_energy_bolt_area_entered.bind(bolt))
-
-func _on_energy_bolt_area_entered(target_area: Area3D, bolt: Area3D) -> void:
-	if not is_instance_valid(bolt) or not is_instance_valid(target_area):
-		return
-	var npc := target_area.get_parent() as Node3D
-	if npc and npcs.has(npc):
-		_defeat_npc(npc, bolt.global_position)
-	bolt.queue_free()
-
-func _update_energy_bolts(delta: float) -> void:
-	for bolt in active_bolts.duplicate():
-		if not is_instance_valid(bolt):
-			active_bolts.erase(bolt)
-			continue
-		var bolt_id := bolt.get_instance_id()
-		var velocity: Vector3 = bolt_velocities.get(bolt_id, Vector3.ZERO)
-		bolt.global_position += velocity * delta
-		var age: float = bolt_ages.get(bolt_id, 0.0) + delta
-		bolt_ages[bolt_id] = age
-		if age >= 1.6:
-			bolt.queue_free()
-			active_bolts.erase(bolt)
-			bolt_velocities.erase(bolt_id)
-			bolt_ages.erase(bolt_id)
-
-func _defeat_npc(npc: Node3D, hit_position: Vector3) -> void:
-	if not is_instance_valid(npc) or not npcs.has(npc):
-		return
-	var key := npc.get_instance_id()
-	npcs.erase(npc)
-	npc_directions.erase(key)
-	npc_walk_times.erase(key)
-	npc_anim_players.erase(key)
-	_spawn_energy_burst(hit_position)
-	# A short, non-graphic fall-and-fade reaction.
-	var fall_tween := create_tween()
-	fall_tween.tween_property(npc, "rotation:z", PI * 0.42, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	fall_tween.tween_interval(1.25)
-	fall_tween.tween_property(npc, "scale", Vector3(0.01, 0.01, 0.01), 0.25)
-	fall_tween.tween_callback(npc.queue_free)
-
-func _spawn_energy_burst(origin: Vector3) -> void:
-	for i in range(10):
-		var spark := MeshInstance3D.new()
-		var mesh := SphereMesh.new()
-		mesh.radius = rng.randf_range(0.035, 0.075)
-		mesh.height = mesh.radius * 2.0
-		spark.mesh = mesh
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(0.08, 0.78, 1.0)
-		material.emission_enabled = true
-		material.emission = Color(0.04, 0.55, 1.0)
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		spark.material_override = material
-		spark.global_position = origin
-		add_child(spark)
-		var direction := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(0.1, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
-		var tween := create_tween()
-		tween.set_parallel(true)
-		tween.tween_property(spark, "global_position", origin + direction * rng.randf_range(0.45, 1.0), 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		tween.tween_property(spark, "scale", Vector3.ZERO, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-		tween.chain().tween_callback(spark.queue_free)
+	var destination := origin + (-camera.global_transform.basis.z * 48.0)
+	var tween := create_tween()
+	tween.tween_property(bolt, "global_position", destination, 0.7).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_callback(bolt.queue_free)
 
 func _create_npcs() -> void:
 	var positions := [
@@ -518,19 +439,7 @@ func _create_npcs() -> void:
 			var anim_player := _find_animation_player(person)
 			npc_anim_players[npc.get_instance_id()] = anim_player
 			_play_person_animation(anim_player, "walk")
-		var hit_area := Area3D.new()
-		hit_area.name = "EnergyHitArea"
-		hit_area.collision_layer = 2
-		hit_area.collision_mask = 0
-		npc.add_child(hit_area)
-		var hit_shape := CollisionShape3D.new()
-		var hit_capsule := CapsuleShape3D.new()
-		hit_capsule.radius = 0.42
-		hit_capsule.height = 1.8
-		hit_shape.shape = hit_capsule
-		hit_shape.position.y = 0.9
-		hit_area.add_child(hit_shape)
-	npcs.append(npc)
+		npcs.append(npc)
 		var key := npc.get_instance_id()
 		npc_directions[key] = (1.0 if i % 2 == 0 else -1.0)
 		npc_walk_times[key] = rng.randf_range(2.0, 5.0)
@@ -753,7 +662,6 @@ func _physics_process(delta: float) -> void:
 	if is_paused:
 		return
 	_update_npcs(delta)
-	_update_energy_bolts(delta)
 	fire_cooldown = max(0.0, fire_cooldown - delta)
 	if driving:
 		_drive_car(delta)
