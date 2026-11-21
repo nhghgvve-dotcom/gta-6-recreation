@@ -22,6 +22,8 @@ var driving := false
 var car_velocity := 0.0
 var car_yaw := 0.0
 var mouse_captured := true
+var is_paused := false
+var pause_layer: CanvasLayer
 var hud: Label
 var help_label: Label
 var speed_label: Label
@@ -38,6 +40,7 @@ var npc_animation_parts: Dictionary = {}
 var npc_walk_phases: Dictionary = {}
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	rng.randomize()
 	_setup_environment()
 	_build_world()
@@ -334,7 +337,122 @@ func _create_hud() -> void:
 	impact_overlay.color = Color(0.72, 0.015, 0.025, 0.0)
 	impact_overlay.z_index = 100
 	layer.add_child(impact_overlay)
+	_create_pause_menu()
 	_update_hud()
+
+func _create_pause_menu() -> void:
+	pause_layer = CanvasLayer.new()
+	pause_layer.name = "PauseMenu"
+	pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	pause_layer.layer = 20
+	add_child(pause_layer)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.015, 0.025, 0.045, 0.78)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	pause_layer.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(390, 0)
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.055, 0.075, 0.11, 0.97)
+	panel_style.border_color = Color(0.25, 0.68, 0.82, 0.9)
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(18)
+	panel_style.content_margin_left = 34
+	panel_style.content_margin_right = 34
+	panel_style.content_margin_top = 30
+	panel_style.content_margin_bottom = 28
+	panel.add_theme_stylebox_override("panel", panel_style)
+	center.add_child(panel)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 13)
+	panel.add_child(stack)
+
+	var heading := Label.new()
+	heading.text = "PAUSED"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 34)
+	heading.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0))
+	stack.add_child(heading)
+
+	var subtitle := Label.new()
+	subtitle.text = "Take a break. The island can wait."
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 14)
+	subtitle.add_theme_color_override("font_color", Color(0.62, 0.72, 0.82))
+	stack.add_child(subtitle)
+
+	var spacer := Control.new()
+	spacer.custom_minimum_size.y = 8
+	stack.add_child(spacer)
+
+	var resume_button := _make_pause_button("RESUME")
+	resume_button.pressed.connect(_resume_game)
+	stack.add_child(resume_button)
+
+	var restart_button := _make_pause_button("RESTART")
+	restart_button.pressed.connect(_restart_game)
+	stack.add_child(restart_button)
+
+	var quit_button := _make_pause_button("QUIT GAME")
+	quit_button.pressed.connect(_quit_game)
+	stack.add_child(quit_button)
+
+	var hint := Label.new()
+	hint.text = "Press ESC to resume"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_color_override("font_color", Color(0.48, 0.59, 0.7))
+	stack.add_child(hint)
+	pause_layer.visible = false
+
+func _make_pause_button(caption: String) -> Button:
+	var button := Button.new()
+	button.text = caption
+	button.custom_minimum_size = Vector2(0, 48)
+	button.add_theme_font_size_override("font_size", 16)
+	button.add_theme_color_override("font_color", Color(0.92, 0.97, 1.0))
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.10, 0.16, 0.23)
+	normal.border_color = Color(0.20, 0.38, 0.49)
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(9)
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = Color(0.12, 0.31, 0.39)
+	hover.border_color = Color(0.35, 0.78, 0.88)
+	hover.set_border_width_all(1)
+	hover.set_corner_radius_all(9)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	return button
+
+func _set_paused(value: bool) -> void:
+	is_paused = value
+	get_tree().paused = value
+	pause_layer.visible = value
+	mouse_captured = not value
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if value else Input.MOUSE_MODE_CAPTURED
+	if value:
+		pause_layer.get_child(0).get_child(0).get_child(0).get_child(2).grab_focus()
+
+func _resume_game() -> void:
+	_set_paused(false)
+
+func _restart_game() -> void:
+	get_tree().paused = false
+	get_tree().reload_current_scene()
+
+func _quit_game() -> void:
+	get_tree().paused = false
+	get_tree().quit()
 
 func _update_hud() -> void:
 	hud.text = "COASTLINE  |  FREE ROAM"
@@ -346,9 +464,12 @@ func _update_hud() -> void:
 		speed_label.text = "ON FOOT"
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		mouse_captured = not mouse_captured
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if mouse_captured else Input.MOUSE_MODE_VISIBLE
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		_set_paused(not is_paused)
+		get_viewport().set_input_as_handled()
+		return
+	if is_paused:
+		return
 	if event is InputEventMouseMotion and mouse_captured:
 		if driving:
 			car_yaw -= event.relative.x * 0.0025
@@ -363,6 +484,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_enter_car()
 
 func _physics_process(delta: float) -> void:
+	if is_paused:
+		return
 	_update_npcs(delta)
 	if driving:
 		_drive_car(delta)
