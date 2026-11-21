@@ -21,6 +21,17 @@ jobs:
           use-dotnet: false
           include-templates: true
 
+      - name: Download rigged human character models
+        run: |
+          mkdir -p Coastline/assets/people
+          curl -fL https://models.vinish.dev/people/casual-man.glb -o Coastline/assets/people/casual-man.glb
+          curl -fL https://models.vinish.dev/people/casual-woman.glb -o Coastline/assets/people/casual-woman.glb
+          curl -fL https://models.vinish.dev/people/business-man.glb -o Coastline/assets/people/business-man.glb
+          curl -fL https://models.vinish.dev/people/business-woman.glb -o Coastline/assets/people/business-woman.glb
+          curl -fL https://models.vinish.dev/people/construction-worker.glb -o Coastline/assets/people/construction-worker.glb
+          curl -fL https://models.vinish.dev/people/doctor.glb -o Coastline/assets/people/doctor.glb
+          curl -fL https://models.vinish.dev/people/runner.glb -o Coastline/assets/people/runner.glb
+
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
 
