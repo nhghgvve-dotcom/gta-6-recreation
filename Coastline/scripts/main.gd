@@ -497,7 +497,8 @@ func _create_player() -> void:
 func _create_vr_hand_model(parent: Node3D, side: float) -> Node3D:
 	# Lightweight stylized hands built from meshes so they work without extra downloads.
 	var hand := Node3D.new()
-	hand.name = "VRHandModel"	parent.add_child(hand)
+	hand.name = "VRHandModel"
+	parent.add_child(hand)
 	var skin := StandardMaterial3D.new()
 	skin.albedo_color = Color(0.78, 0.57, 0.43)
 	skin.roughness = 0.88
@@ -997,7 +998,8 @@ func _show_wasted_screen() -> void:
 	stack.alignment = BoxContainer.ALIGNMENT_CENTER
 	center.add_child(stack)
 	var title := Label.new()
-	title.text = "WASTED"	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.text = "WASTED"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 76)
 	title.add_theme_color_override("font_color", Color(0.94, 0.08, 0.10))
 	title.add_theme_color_override("font_outline_color", Color(0.02, 0.01, 0.015, 1.0))
