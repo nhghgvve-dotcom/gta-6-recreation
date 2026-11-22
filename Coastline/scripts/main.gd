@@ -46,6 +46,7 @@ var npc_animation_parts: Dictionary = {}
 var npc_walk_phases: Dictionary = {}
 var npc_states: Dictionary = {}
 var npc_alert_times: Dictionary = {}
+var npc_hit_counts: Dictionary = {}
 var weapon_menu_open := false
 var selected_weapon := "FISTS"
 var weapon_menu_layer: CanvasLayer
@@ -570,7 +571,7 @@ func _fire_selected_weapon() -> void:
 			nearest_distance = along
 			nearest_npc = npc
 	if nearest_npc:
-		_spawn_npc_ragdoll(nearest_npc)
+		_register_npc_hit(nearest_npc)
 	# Keep the visible energy bolt cosmetic; hit detection above avoids
 	# physics-area interactions that previously caused instability.
 	var bolt := MeshInstance3D.new()
@@ -1029,6 +1030,19 @@ func _check_car_pedestrian_collisions() -> void:
 		if is_instance_valid(npc) and npc.global_position.distance_to(car.global_position) < 2.25:
 			_spawn_npc_ragdoll(npc)
 
+func _register_npc_hit(npc: Node3D) -> void:
+	var key := npc.get_instance_id()
+	var hit_count: int = int(npc_hit_counts.get(key, 0)) + 1
+	npc_hit_counts[key] = hit_count
+	if hit_count >= 4:
+		# Four arcade energy hits trigger a brief, non-graphic knockout.
+		_spawn_npc_ragdoll(npc)
+		return
+	# Each earlier hit makes the pedestrian pause, turn, and flee.
+	npc_states[key] = "startled"
+	npc_alert_times[key] = 0.85
+	npc_directions[key] = -1.0 if npc.global_position.x < player.global_position.x else 1.0
+
 func _spawn_npc_ragdoll(npc: Node3D) -> void:
 	_trigger_impact_effect()
 	var origin := npc.global_position
@@ -1038,6 +1052,7 @@ func _spawn_npc_ragdoll(npc: Node3D) -> void:
 	npc_walk_times.erase(key)
 	npc_states.erase(key)
 	npc_alert_times.erase(key)
+	npc_hit_counts.erase(key)
 	npc_anim_players.erase(key)
 	_spawn_impact_sparks(origin + Vector3(0, 0.9, 0))
 	# Keep the imported human model intact and give it a brief, non-graphic fall reaction.
@@ -1055,9 +1070,9 @@ func _spawn_impact_sparks(origin: Vector3) -> void:
 		mesh.height = mesh.radius * 2.0
 		spark.mesh = mesh
 		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(0.95, 0.035, 0.045, 1.0)
+		material.albedo_color = Color(0.05, 0.82, 1.0, 1.0)
 		material.emission_enabled = true
-		material.emission = Color(0.8, 0.015, 0.02)
+		material.emission = Color(0.02, 0.55, 0.9)
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		spark.material_override = material
 		spark.global_position = origin
