@@ -50,6 +50,15 @@ jobs:
           cp Coastline/assets/vehicles/sports-car.glb Coastline/assets/vehicles/police-car.glb
           test -s Coastline/assets/vehicles/sports-car.glb
 
+      - name: Install Godot OpenXR Meta Quest plugin
+        run: |
+          curl -fL https://github.com/GodotVR/godot_openxr_vendors/releases/download/4.3.1-stable/godotopenxrvendorsaddon.zip -o /tmp/godotopenxrvendorsaddon.zip
+          mkdir -p /tmp/openxr-vendors Coastline/addons
+          unzip -q /tmp/godotopenxrvendorsaddon.zip -d /tmp/openxr-vendors
+          ADDON_DIR="$(find /tmp/openxr-vendors -type d -path '*/addons/godotopenxrvendors' -print -quit)"
+          test -n "$ADDON_DIR"
+          cp -R "$ADDON_DIR" Coastline/addons/
+
       - name: Configure Godot Android SDK paths
         run: |
           mkdir -p "$HOME/.config/godot"
