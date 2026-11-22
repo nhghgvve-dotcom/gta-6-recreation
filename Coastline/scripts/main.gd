@@ -62,10 +62,10 @@ func _setup_environment() -> void:
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.10, 0.30, 0.55)
-	sky_mat.sky_horizon_color = Color(0.72, 0.83, 0.91)
-	sky_mat.ground_bottom_color = Color(0.16, 0.20, 0.19)
-	sky_mat.ground_horizon_color = Color(0.66, 0.72, 0.67)
+	sky_mat.sky_top_color = Color(0.075, 0.055, 0.19)
+	sky_mat.sky_horizon_color = Color(0.92, 0.34, 0.43)
+	sky_mat.ground_bottom_color = Color(0.10, 0.12, 0.20)
+	sky_mat.ground_horizon_color = Color(0.66, 0.31, 0.39)
 	sky_mat.sun_angle_max = 18.0
 	sky.sky_material = sky_mat
 	env.sky = sky
@@ -223,7 +223,7 @@ func _build_world() -> void:
 							break
 				if overlaps_road:
 					continue
-				var palette := [Color(0.78, 0.72, 0.61), Color(0.69, 0.74, 0.73), Color(0.84, 0.82, 0.74), Color(0.53, 0.62, 0.64), Color(0.78, 0.63, 0.49)]
+				var palette := [Color(0.88, 0.56, 0.52), Color(0.77, 0.65, 0.78), Color(0.90, 0.78, 0.59), Color(0.49, 0.68, 0.73), Color(0.84, 0.62, 0.49)]
 				var building_mat := _mat(palette[rng.randi_range(0, palette.size() - 1)], 0.74)
 				_static_box(self, Vector3(bx, h * 0.5, bz), Vector3(w, h, d), building_mat)
 				_mesh_box(self, Vector3(bx, h + 0.25, bz), Vector3(w + 0.8, 0.5, d + 0.8), _mat(Color(0.22, 0.25, 0.26)))
@@ -235,6 +235,14 @@ func _build_world() -> void:
 		if abs(px) < 14 or abs(pz) < 10:
 			continue
 		_create_palm(Vector3(px, 0, pz))
+	# Raised, walkable-looking sidewalks run beside every main road.
+	var sidewalk_mat := _mat(Color(0.62, 0.57, 0.57), 0.9)
+	for road_z in [-180.0, -90.0, 0.0, 90.0, 180.0]:
+		for side in [-1.0, 1.0]:
+			_mesh_box(self, Vector3(30, 0.06, road_z + side * (ROAD_WIDTH * 0.5 + 3.5)), Vector3(420, 0.18, 5.5), sidewalk_mat, "Sidewalk")
+	for road_x in [-150.0, -60.0, 30.0, 120.0, 210.0]:
+		for side in [-1.0, 1.0]:
+			_mesh_box(self, Vector3(road_x + side * (ROAD_WIDTH * 0.5 + 3.5), 0.06, 0), Vector3(5.5, 0.18, 410), sidewalk_mat, "Sidewalk")
 	_mesh_box(self, Vector3(-206, -0.1, 0), Vector3(3.5, 0.25, 500), concrete, "Promenade")
 
 func _create_palm(pos: Vector3) -> void:
@@ -497,14 +505,14 @@ func _fire_selected_weapon() -> void:
 
 func _create_npcs() -> void:
 	var positions := [
-		Vector3(-125, 0.0, -145), Vector3(-82, 0.0, -128),
-		Vector3(-35, 0.0, -55), Vector3(5, 0.0, -58),
-		Vector3(68, 0.0, 38), Vector3(105, 0.0, 57),
-		Vector3(155, 0.0, 128), Vector3(185, 0.0, 145),
-		Vector3(-175, 0.0, 55), Vector3(-195, 0.0, 78),
-		Vector3(55, 0.0, 175), Vector3(95, 0.0, 195)
+		Vector3(-125, 0.0, -169), Vector3(-82, 0.0, -169),
+		Vector3(-35, 0.0, -79), Vector3(5, 0.0, -79),
+		Vector3(68, 0.0, 11), Vector3(105, 0.0, 11),
+		Vector3(155, 0.0, 101), Vector3(185, 0.0, 101),
+		Vector3(-175, 0.0, 191), Vector3(-195, 0.0, 191),
+		Vector3(55, 0.0, -101), Vector3(95, 0.0, -101)
 	]
-	var models := ["casual-man", "casual-woman", "business-man", "business-woman", "construction-worker", "doctor", "runner"]
+	var models := ["casual-man", "casual-woman", "business-man", "business-woman", "construction-worker", "doctor", "runner-woman"]
 	for i in range(positions.size()):
 		var npc := Node3D.new()
 		npc.name = "Pedestrian_%02d" % i
