@@ -549,7 +549,8 @@ func _update_vr_hands() -> void:
 		vr_right_hand_model.visible = not right_optical
 
 func _instantiate_person(model_name: String) -> Node3D:
-	var path := "res://assets/people/" + model_name + ".glb"	var packed := load(path) as PackedScene
+	var path := "res://assets/people/" + model_name + ".glb"
+	var packed := load(path) as PackedScene
 	if packed == null:
 		push_warning("Missing person model: " + path)
 		return null
@@ -1998,4 +1999,3 @@ func _spawn_npc_ragdoll(npc: Node3D) -> void:
 	var fall_tween := create_tween()
 	fall_tween.tween_property(npc, "rotation:z", PI * 0.42, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	fall_tween.tween_interval(2.0)
-	fall_tween.tween_callback(npc.queue_free)
