@@ -114,7 +114,7 @@ function render(){
 function loop(t){const dt=Math.min(.04,(t-last)/1000||0);last=t;update(dt);render();requestAnimationFrame(loop)}requestAnimationFrame(loop);
 function action(){if(!driving){if(Math.hypot(player.x-1100,player.y-950)<125){driving=true;car.x=1100;car.y=950;car.a=0;hintEl.textContent='Steer with the stick · Up to accelerate · Down to brake'}else{hintEl.textContent='Move closer to the parked car to drive';setTimeout(()=>hintEl.textContent='Move with the stick · Tap DRIVE to enter a car',1700)}}else{driving=false;player.x+=38;car.v=0;hintEl.textContent='On foot · Tap DRIVE near a car to get back in'}}
 document.getElementById('drive').addEventListener('pointerdown',e=>{e.preventDefault();action()});
-document.getElementById('interact').addEventListener('pointerdown',e=>{e.preventDefault();if(chipTaken&&mission<2){player.x=1470;player.y=1240}else if(!chipTaken){player.x=1590;player.y=1385}});
+document.getElementById('interact').addEventListener('pointerdown',e=>{e.preventDefault();hintEl.textContent=chipTaken?'Follow the green beacon to finish the mission':'Explore the city — the data chip is marked in cyan'});
 const overlay=document.getElementById('overlay');document.getElementById('pause').onclick=()=>{paused=!paused;overlay.classList.toggle('show',paused)};document.getElementById('resume').onclick=()=>{paused=false;overlay.classList.remove('show')};
 const stick=document.getElementById('stick'),knob=document.getElementById('knob');let pointer=null;
 function setJoy(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=42,len=Math.hypot(dx,dy),s=Math.min(1,max/(len||1));joy.x=dx*s/max;joy.y=dy*s/max;knob.style.transform='translate('+dx*s+'px,'+dy*s+'px)'}
