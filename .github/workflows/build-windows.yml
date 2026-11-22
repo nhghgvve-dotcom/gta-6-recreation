@@ -39,12 +39,13 @@ jobs:
           test -s Coastline/assets/vehicles/sports-car.glb
           file Coastline/assets/vehicles/sports-car.glb | grep -qi 'glb\|gltf\|binary'
 
-      - name: Download CC0 police character and vehicle models
+      - name: Download police character and compatible patrol vehicle models
         run: |
           mkdir -p Coastline/assets/people Coastline/assets/vehicles
           curl -fL "https://files.innerscene.com/library/police-officer-standing-3d-person-emergency-services-9fd93114/5a54c44f2bfc5920ccd2/professional-police-officer.glb" -o Coastline/assets/people/police-officer.glb
           curl -fL "https://shuriken.studio/models/download/6fb5a1fb-25d8-4fdc-9e4b-a605a39f884c" -o Coastline/assets/vehicles/police-helicopter.glb
-          curl -fL "https://tevy.dev/models/police-car/v1/lod2.glb" -o Coastline/assets/vehicles/police-car.glb
+          # Reuse the verified, Godot-compatible sports-car mesh for the patrol car; the script adds police lights.
+          cp Coastline/assets/vehicles/sports-car.glb Coastline/assets/vehicles/police-car.glb
           test -s Coastline/assets/people/police-officer.glb
           test -s Coastline/assets/vehicles/police-helicopter.glb
           test -s Coastline/assets/vehicles/police-car.glb
