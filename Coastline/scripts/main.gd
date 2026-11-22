@@ -18,6 +18,8 @@ var camera_pivot: Node3D
 var camera: Camera3D
 var camera_spring: SpringArm3D
 var car: Node3D
+var car_model: Node3D
+var car_wheels: Array[Node3D] = []
 var driving := false
 var car_velocity := 0.0
 var car_yaw := 0.0
@@ -539,27 +541,44 @@ func _create_npcs() -> void:
 func _create_car() -> void:
 	car = Node3D.new()
 	car.name = "PlayerCar"
-	car.position = Vector3(10, 0.65, 4)
+	# The imported sedan is authored at real-world scale with its tyres at y=0.
+	# The terrain top is y=-0.2, so this places the tyres directly on the road.
+	car.position = Vector3(10, -0.2, 4)
 	add_child(car)
-	var paint := _mat(Color(0.72, 0.16, 0.10), 0.27, 0.48)
-	var glass := _mat(Color(0.08, 0.16, 0.20), 0.2, 0.2)
-	_mesh_box(car, Vector3(0, 0.35, 0), Vector3(2.15, 0.65, 4.2), paint, "CarBody")
-	_mesh_box(car, Vector3(0, 0.92, -0.25), Vector3(1.72, 0.78, 2.0), glass, "Cabin")
-	for x in [-1.05, 1.05]:
-		for z in [-1.35, 1.35]:
-			var wheel := MeshInstance3D.new()
-			var wheel_mesh := CylinderMesh.new()
-			wheel_mesh.top_radius = 0.39
-			wheel_mesh.bottom_radius = 0.39
-			wheel_mesh.height = 0.24
-			wheel.mesh = wheel_mesh
-			wheel.material_override = _mat(Color(0.035, 0.04, 0.045))
-			wheel.position = Vector3(x, 0.25, z)
-			wheel.rotation.z = PI / 2
-			car.add_child(wheel)
-	var light_mat := _mat(Color(1.0, 0.88, 0.58), 0.25)
-	for x in [-0.72, 0.72]:
-		_mesh_box(car, Vector3(x, 0.43, -2.12), Vector3(0.42, 0.18, 0.08), light_mat, "Headlight")
+	car_model = load("res://assets/vehicles/family-sedan.glb").instantiate() as Node3D
+	if car_model:
+		car_model.name = "DetailedSedan"
+		# Godot vehicles face -Z; turn the source model to match the driving code.
+		car_model.rotation.y = PI
+		car.add_child(car_model)
+		for wheel_name in ["wheel_FL", "wheel_FR", "wheel_RL", "wheel_RR"]:
+			var wheel := car_model.find_child(wheel_name, true, false) as Node3D
+			if wheel:
+				car_wheels.append(wheel)
+		if car_wheels.size() != 4:
+			push_warning("Sedan wheel nodes were not all found; wheel animation may be incomplete.")
+	else:
+		push_error("Could not load detailed sedan model.")
+	# Keep the car's interaction footprint aligned to its visible body.
+	var collision := StaticBody3D.new()
+	collision.name = "VehicleCollision"
+	car.add_child(collision)
+	var collision_shape := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(2.1, 1.35, 4.9)
+	collision_shape.shape = shape
+	collision_shape.position.y = 0.72
+	collision.add_child(collision_shape)
+
+func _animate_car_wheels(delta: float) -> void:
+	if abs(car_velocity) < 0.01:
+		return
+	# The model's wheel pivots are centered on each axle. Spin them in place
+	# using the car's travel distance and an approximate 0.33 m tyre radius.
+	var wheel_rotation := -car_velocity * delta / 0.33
+	for wheel in car_wheels:
+		if is_instance_valid(wheel):
+			wheel.rotate_object_local(Vector3.RIGHT, wheel_rotation)
 
 func _create_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -772,6 +791,7 @@ func _physics_process(delta: float) -> void:
 		_move_player(delta)
 		if not weapon_menu_open and (Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or Input.is_action_pressed("fire")) and fire_cooldown <= 0.0:
 			_fire_selected_weapon()
+	_animate_car_wheels(delta)
 	_update_camera()
 	_update_impact_effects(delta)
 	_update_hud()
