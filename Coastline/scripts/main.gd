@@ -38,8 +38,6 @@ var npc_directions: Dictionary = {}
 var npc_walk_times: Dictionary = {}
 var npc_animation_parts: Dictionary = {}
 var npc_walk_phases: Dictionary = {}
-var npc_states: Dictionary = {}
-var npc_alert_times: Dictionary = {}
 var weapon_menu_open := false
 var selected_weapon := "FISTS"
 var weapon_menu_layer: CanvasLayer
@@ -64,10 +62,10 @@ func _setup_environment() -> void:
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.075, 0.055, 0.20)
-	sky_mat.sky_horizon_color = Color(0.98, 0.34, 0.43)
-	sky_mat.ground_bottom_color = Color(0.12, 0.12, 0.22)
-	sky_mat.ground_horizon_color = Color(0.94, 0.48, 0.48)
+	sky_mat.sky_top_color = Color(0.10, 0.30, 0.55)
+	sky_mat.sky_horizon_color = Color(0.72, 0.83, 0.91)
+	sky_mat.ground_bottom_color = Color(0.16, 0.20, 0.19)
+	sky_mat.ground_horizon_color = Color(0.66, 0.72, 0.67)
 	sky_mat.sun_angle_max = 18.0
 	sky.sky_material = sky_mat
 	env.sky = sky
@@ -85,9 +83,8 @@ func _setup_environment() -> void:
 	world_env.environment = env
 	add_child(world_env)
 	sun = DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-18, -28, 0)
-	sun.light_color = Color(1.0, 0.68, 0.57)
-	sun.light_energy = 1.05
+	sun.rotation_degrees = Vector3(-42, -28, 0)
+	sun.light_energy = 1.25
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 180.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
@@ -194,16 +191,10 @@ func _build_world() -> void:
 	_mesh_box(self, Vector3(-WORLD_SIZE * 0.5 + 18, -0.48, 0), Vector3(42, 0.35, WORLD_SIZE + 10), sand, "Beach")
 	for z in [-180.0, -90.0, 0.0, 90.0, 180.0]:
 		_mesh_box(self, Vector3(30, -0.12, z), Vector3(420, 0.22, ROAD_WIDTH), asphalt, "Boulevard")
-		for side in [-1.0, 1.0]:
-			_mesh_box(self, Vector3(30, 0.02, z + side * 12.0), Vector3(420, 0.24, 5.2), concrete, "PalmCitySidewalk")
-			_mesh_box(self, Vector3(30, 0.10, z + side * 9.25), Vector3(420, 0.34, 0.34), white, "SidewalkCurb")
 		for x in range(-170, 231, 20):
 			_mesh_box(self, Vector3(float(x), 0.015, z), Vector3(9, 0.035, 0.22), yellow, "LaneMark")
 	for x in [-150.0, -60.0, 30.0, 120.0, 210.0]:
 		_mesh_box(self, Vector3(x, -0.10, 0), Vector3(ROAD_WIDTH, 0.22, 410), asphalt, "CrossStreet")
-		for side in [-1.0, 1.0]:
-			_mesh_box(self, Vector3(x + side * 12.0, 0.02, 0), Vector3(5.2, 0.24, 410), concrete, "PalmCitySidewalk")
-			_mesh_box(self, Vector3(x + side * 9.25, 0.10, 0), Vector3(0.34, 0.34, 410), white, "SidewalkCurb")
 		for z in range(-190, 211, 20):
 			_mesh_box(self, Vector3(x, 0.02, float(z)), Vector3(0.22, 0.035, 9), white, "LaneMark")
 	for gx in range(-2, 4):
@@ -232,7 +223,7 @@ func _build_world() -> void:
 							break
 				if overlaps_road:
 					continue
-				var palette := [Color(0.96, 0.70, 0.57), Color(0.64, 0.80, 0.82), Color(0.98, 0.84, 0.68), Color(0.55, 0.67, 0.80), Color(0.91, 0.61, 0.67), Color(0.72, 0.66, 0.86)]
+				var palette := [Color(0.78, 0.72, 0.61), Color(0.69, 0.74, 0.73), Color(0.84, 0.82, 0.74), Color(0.53, 0.62, 0.64), Color(0.78, 0.63, 0.49)]
 				var building_mat := _mat(palette[rng.randi_range(0, palette.size() - 1)], 0.74)
 				_static_box(self, Vector3(bx, h * 0.5, bz), Vector3(w, h, d), building_mat)
 				_mesh_box(self, Vector3(bx, h + 0.25, bz), Vector3(w + 0.8, 0.5, d + 0.8), _mat(Color(0.22, 0.25, 0.26)))
@@ -505,16 +496,15 @@ func _fire_selected_weapon() -> void:
 	tween.tween_callback(bolt.queue_free)
 
 func _create_npcs() -> void:
-	# Pedestrians begin on the paved sidewalks, not in traffic lanes.
 	var positions := [
-		Vector3(-125, 0.0, -168), Vector3(-82, 0.0, -192),
-		Vector3(-35, 0.0, -102), Vector3(5, 0.0, -78),
-		Vector3(68, 0.0, 102), Vector3(105, 0.0, 78),
-		Vector3(155, 0.0, 192), Vector3(185, 0.0, 168),
-		Vector3(-175, 0.0, 102), Vector3(-195, 0.0, 78),
-		Vector3(55, 0.0, 192), Vector3(95, 0.0, 168)
+		Vector3(-125, 0.0, -145), Vector3(-82, 0.0, -128),
+		Vector3(-35, 0.0, -55), Vector3(5, 0.0, -58),
+		Vector3(68, 0.0, 38), Vector3(105, 0.0, 57),
+		Vector3(155, 0.0, 128), Vector3(185, 0.0, 145),
+		Vector3(-175, 0.0, 55), Vector3(-195, 0.0, 78),
+		Vector3(55, 0.0, 175), Vector3(95, 0.0, 195)
 	]
-	var models := ["casual-man", "casual-woman", "business-man", "business-woman", "construction-worker", "doctor", "runner-woman"]
+	var models := ["casual-man", "casual-woman", "business-man", "business-woman", "construction-worker", "doctor", "runner"]
 	for i in range(positions.size()):
 		var npc := Node3D.new()
 		npc.name = "Pedestrian_%02d" % i
@@ -530,63 +520,6 @@ func _create_npcs() -> void:
 		var key := npc.get_instance_id()
 		npc_directions[key] = (1.0 if i % 2 == 0 else -1.0)
 		npc_walk_times[key] = rng.randf_range(2.0, 5.0)
-		npc_states[key] = "walking"
-		npc_alert_times[key] = 0.0
-
-func _is_player_aiming_at(npc: Node3D) -> bool:
-	if selected_weapon == "FISTS" or driving or weapon_menu_open or not is_instance_valid(camera):
-		return false
-	var origin := camera.global_position
-	var forward := -camera.global_transform.basis.z.normalized()
-	var target := npc.global_position + Vector3(0, 1.0, 0)
-	var offset := target - origin
-	var distance := offset.length()
-	if distance > 24.0 or distance < 0.1:
-		return false
-	return forward.dot(offset.normalized()) > 0.965
-
-func _update_npcs(delta: float) -> void:
-	for npc in npcs:
-		if not is_instance_valid(npc):
-			continue
-		var key := npc.get_instance_id()
-		var alert_time: float = npc_alert_times.get(key, 0.0)
-		if _is_player_aiming_at(npc):
-			alert_time += delta
-			npc_states[key] = "startled" if alert_time < 1.0 else "fleeing"
-			npc_alert_times[key] = alert_time
-		else:
-			alert_time = max(0.0, alert_time - delta * 1.8)
-			npc_alert_times[key] = alert_time
-			if alert_time <= 0.0:
-				npc_states[key] = "walking"
-		var anim: AnimationPlayer = npc_anim_players.get(key)
-		if npc_states[key] == "fleeing":
-			var away := npc.global_position - player.global_position
-			away.y = 0.0
-			if away.length() > 0.01:
-				away = away.normalized()
-				npc.global_position += away * 4.4 * delta
-				npc.rotation.y = atan2(away.x, away.z)
-			_play_person_animation(anim, "run")
-		elif npc_states[key] == "startled":
-			var toward := player.global_position - npc.global_position
-			toward.y = 0.0
-			if toward.length() > 0.01:
-				npc.rotation.y = atan2(toward.x, toward.z)
-			_play_person_animation(anim, "idle")
-		else:
-			var direction: float = npc_directions.get(key, 1.0)
-			var remaining: float = npc_walk_times.get(key, 2.0) - delta
-			if remaining <= 0.0:
-				direction *= -1.0
-				remaining = rng.randf_range(2.0, 5.0)
-			npc_directions[key] = direction
-			npc_walk_times[key] = remaining
-			npc.position.x += direction * 1.15 * delta
-			npc.position.x = clamp(npc.position.x, -215.0, 225.0)
-			npc.rotation.y = PI / 2.0 if direction > 0.0 else -PI / 2.0
-			_play_person_animation(anim, "walk")
 
 func _create_car() -> void:
 	car = Node3D.new()
@@ -906,8 +839,6 @@ func _spawn_npc_ragdoll(npc: Node3D) -> void:
 	npc_directions.erase(key)
 	npc_walk_times.erase(key)
 	npc_anim_players.erase(key)
-	npc_states.erase(key)
-	npc_alert_times.erase(key)
 	_spawn_impact_sparks(origin + Vector3(0, 0.9, 0))
 	# Keep the imported human model intact and give it a brief, non-graphic fall reaction.
 	var fall_tween := create_tween()
