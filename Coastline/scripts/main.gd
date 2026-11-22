@@ -199,19 +199,21 @@ func _build_world() -> void:
 		_mesh_box(self, Vector3(x, -0.10, 0), Vector3(ROAD_WIDTH, 0.22, 410), asphalt, "CrossStreet")
 		for z in range(-190, 211, 20):
 			_mesh_box(self, Vector3(x, 0.02, float(z)), Vector3(0.22, 0.035, 9), white, "LaneMark")
+	# Denser city blocks: add more compact mid-rise buildings while keeping
+	# every footprint outside the road corridors and their safety margins.
 	for gx in range(-2, 4):
 		for gz in range(-2, 3):
 			var cx := float(gx) * 90.0 + 30.0
 			var cz := float(gz) * 90.0 + 45.0
 			if abs(cx) > 225 or abs(cz) > 215:
 				continue
-			var count := rng.randi_range(2, 4)
+			var count := rng.randi_range(4, 6)
 			for i in range(count):
-				var bx := cx + rng.randf_range(-26, 26)
-				var bz := cz + rng.randf_range(-25, 25)
-				var w := rng.randf_range(16, 30)
-				var d := rng.randf_range(16, 30)
-				var h := rng.randf_range(12, 52)
+				var bx := cx + rng.randf_range(-31, 31)
+				var bz := cz + rng.randf_range(-30, 30)
+				var w := rng.randf_range(12, 24)
+				var d := rng.randf_range(12, 24)
+				var h := rng.randf_range(14, 64)
 				# Keep building footprints out of every road corridor and its safety margin.
 				var overlaps_road := false
 				for road_z in [-180.0, -90.0, 0.0, 90.0, 180.0]:
@@ -229,8 +231,10 @@ func _build_world() -> void:
 				var building_mat := _mat(palette[rng.randi_range(0, palette.size() - 1)], 0.74)
 				_static_box(self, Vector3(bx, h * 0.5, bz), Vector3(w, h, d), building_mat)
 				_mesh_box(self, Vector3(bx, h + 0.25, bz), Vector3(w + 0.8, 0.5, d + 0.8), _mat(Color(0.22, 0.25, 0.26)))
+				var window_mat := _mat(Color(0.12, 0.22, 0.27), 0.28, 0.25)
 				for floor in range(1, int(h / 5.0)):
-					_mesh_box(self, Vector3(bx, float(floor) * 5.0, bz - d * 0.505), Vector3(w * 0.72, 1.2, 0.12), _mat(Color(0.12, 0.22, 0.27), 0.28, 0.25))
+					_mesh_box(self, Vector3(bx, float(floor) * 5.0, bz - d * 0.505), Vector3(w * 0.72, 1.2, 0.12), window_mat)
+					_mesh_box(self, Vector3(bx + w * 0.505, float(floor) * 5.0, bz), Vector3(0.12, 1.2, d * 0.62), window_mat)
 	for i in range(46):
 		var px := rng.randf_range(-210, 230)
 		var pz := rng.randf_range(-225, 225)
