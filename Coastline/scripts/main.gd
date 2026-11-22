@@ -45,6 +45,7 @@ var weapon_visual: Node3D
 var fire_cooldown := 0.0
 
 func _ready() -> void:
+	_setup_controller_inputs()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	rng.randomize()
 	_setup_environment()
@@ -89,6 +90,64 @@ func _setup_environment() -> void:
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	sun.shadow_bias = 0.035
 	add_child(sun)
+
+func _setup_controller_inputs() -> void:
+	_add_key_action("move_forward", KEY_W)
+	_add_key_action("move_back", KEY_S)
+	_add_key_action("move_left", KEY_A)
+	_add_key_action("move_right", KEY_D)
+	_add_key_action("jump", KEY_SPACE)
+	_add_key_action("sprint", KEY_SHIFT)
+	_add_key_action("interact", KEY_E)
+	_add_key_action("pause", KEY_ESCAPE)
+	_add_key_action("weapon_wheel", KEY_K)
+	for action in ["fire", "weapon_prev", "weapon_next"]:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+	_add_joy_button("jump", JOY_BUTTON_A)
+	_add_joy_button("sprint", JOY_BUTTON_LEFT_STICK)
+	_add_joy_button("interact", JOY_BUTTON_Y)
+	_add_joy_button("pause", JOY_BUTTON_START)
+	_add_joy_button("weapon_wheel", JOY_BUTTON_LEFT_SHOULDER)
+	_add_joy_button("weapon_prev", JOY_BUTTON_DPAD_LEFT)
+	_add_joy_button("weapon_next", JOY_BUTTON_DPAD_RIGHT)
+	_add_joy_axis("move_left", JOY_AXIS_LEFT_X, -1.0)
+	_add_joy_axis("move_right", JOY_AXIS_LEFT_X, 1.0)
+	_add_joy_axis("move_forward", JOY_AXIS_LEFT_Y, -1.0)
+	_add_joy_axis("move_back", JOY_AXIS_LEFT_Y, 1.0)
+	_add_joy_axis("fire", JOY_AXIS_TRIGGER_RIGHT, 1.0)
+
+func _add_key_action(action: String, key: Key) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	var event := InputEventKey.new()
+	event.physical_keycode = key
+	InputMap.action_add_event(action, event)
+
+func _add_joy_button(action: String, button: JoyButton) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	var event := InputEventJoypadButton.new()
+	event.button_index = button
+	InputMap.action_add_event(action, event)
+
+func _add_joy_axis(action: String, axis: JoyAxis, value: float) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	var event := InputEventJoypadMotion.new()
+	event.axis = axis
+	event.axis_value = value
+	InputMap.action_add_event(action, event)
+
+func _controller_look(delta: float) -> void:
+	var stick := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
+	if stick.length() < 0.16:
+		return
+	if driving:
+		car_yaw -= stick.x * 2.4 * delta
+	else:
+		player.rotation.y -= stick.x * 2.4 * delta
+	camera_pivot.rotation.x = clamp(camera_pivot.rotation.x + stick.y * 1.8 * delta, -0.65, 0.35)
 
 func _mat(color: Color, roughness := 0.82, metallic := 0.0) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -397,8 +456,28 @@ func _select_weapon(weapon_name: String) -> void:
 func _fire_selected_weapon() -> void:
 	if selected_weapon == "FISTS":
 		return
-	# Fire a harmless stylized energy effect into the environment.
+	# Stylized arcade energy shot: a direct, forgiving crosshair check.
 	fire_cooldown = 0.22 if selected_weapon == "PULSE" else 0.42
+	var origin := camera.global_position
+	var direction := -camera.global_transform.basis.z.normalized()
+	var nearest_npc: Node3D = null
+	var nearest_distance := 60.0
+	for npc in npcs:
+		if not is_instance_valid(npc):
+			continue
+		var target_point := npc.global_position + Vector3(0, 0.95, 0)
+		var offset := target_point - origin
+		var along := offset.dot(direction)
+		if along < 0.0 or along > nearest_distance:
+			continue
+		var closest_point := origin + direction * along
+		if closest_point.distance_to(target_point) <= 1.0:
+			nearest_distance = along
+			nearest_npc = npc
+	if nearest_npc:
+		_spawn_npc_ragdoll(nearest_npc)
+	# Keep the visible energy bolt cosmetic; hit detection above avoids
+	# physics-area interactions that previously caused instability.
 	var bolt := MeshInstance3D.new()
 	var orb := SphereMesh.new()
 	orb.radius = 0.095 if selected_weapon == "PULSE" else 0.15
@@ -410,12 +489,10 @@ func _fire_selected_weapon() -> void:
 	mat.emission = mat.albedo_color
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	bolt.material_override = mat
-	var origin := weapon_visual.global_position + (-camera.global_transform.basis.z * 0.42)
-	bolt.global_position = origin
+	bolt.global_position = weapon_visual.global_position + direction * 0.42
 	add_child(bolt)
-	var destination := origin + (-camera.global_transform.basis.z * 48.0)
 	var tween := create_tween()
-	tween.tween_property(bolt, "global_position", destination, 0.7).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_property(bolt, "global_position", bolt.global_position + direction * 48.0, 0.7).set_trans(Tween.TRANS_LINEAR)
 	tween.tween_callback(bolt.queue_free)
 
 func _create_npcs() -> void:
@@ -618,32 +695,42 @@ func _quit_game() -> void:
 func _update_hud() -> void:
 	hud.text = "COASTLINE  |  FREE ROAM  |  EQUIPPED: " + selected_weapon
 	if driving:
-		help_label.text = "WASD Drive   •   Mouse Look   •   E Exit   •   K Weapon Wheel"
+		help_label.text = "WASD / Left Stick Drive   •   Right Stick Look   •   E / Y Exit   •   LB Wheel"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
 	else:
-		help_label.text = "WASD Move   •   Shift Run   •   Space Jump   •   E Car   •   K Weapon Wheel   •   LMB Fire"
+		help_label.text = "WASD / Left Stick Move   •   Shift / L3 Run   •   Space / A Jump   •   E / Y Car   •   K / LB Wheel   •   LMB / RT Fire"
 		speed_label.text = "ON FOOT"
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.keycode == KEY_K:
+	if event.is_action_pressed("weapon_wheel"):
 		if event.pressed and not event.echo and not is_paused:
 			weapon_menu_open = true
 			weapon_menu_layer.visible = true
 			mouse_captured = false
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			get_viewport().set_input_as_handled()
-		elif not event.pressed and weapon_menu_open:
+		elif event.is_action_released("weapon_wheel") and weapon_menu_open:
 			weapon_menu_open = false
 			weapon_menu_layer.visible = false
 			mouse_captured = true
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			get_viewport().set_input_as_handled()
 		return
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+	if event.is_action_pressed("pause"):
 		_set_paused(not is_paused)
 		get_viewport().set_input_as_handled()
 		return
-	if is_paused or weapon_menu_open:
+	if is_paused:
+		return
+	if weapon_menu_open and event.is_action_pressed("weapon_next"):
+		_select_weapon("ARC" if selected_weapon == "PULSE" else "PULSE" if selected_weapon == "FISTS" else "FISTS")
+		get_viewport().set_input_as_handled()
+		return
+	if weapon_menu_open and event.is_action_pressed("weapon_prev"):
+		_select_weapon("FISTS" if selected_weapon == "PULSE" else "PULSE" if selected_weapon == "ARC" else "ARC")
+		get_viewport().set_input_as_handled()
+		return
+	if weapon_menu_open:
 		return
 	if event is InputEventMouseMotion and mouse_captured:
 		if driving:
@@ -652,7 +739,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			player.rotation.y -= event.relative.x * 0.0025
 			camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - event.relative.y * 0.002, -0.65, 0.35)
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
+	if event.is_action_pressed("interact"):
 		if driving:
 			_exit_car()
 		elif player.global_position.distance_to(car.global_position) < 4.5:
@@ -661,13 +748,14 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if is_paused:
 		return
+	_controller_look(delta)
 	_update_npcs(delta)
 	fire_cooldown = max(0.0, fire_cooldown - delta)
 	if driving:
 		_drive_car(delta)
 	else:
 		_move_player(delta)
-		if not weapon_menu_open and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and fire_cooldown <= 0.0:
+		if not weapon_menu_open and (Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or Input.is_action_pressed("fire")) and fire_cooldown <= 0.0:
 			_fire_selected_weapon()
 	_update_camera()
 	_update_impact_effects(delta)
@@ -677,8 +765,8 @@ func _move_player(delta: float) -> void:
 	# Read movement as a camera-relative input so W always moves away from
 	# the camera and A/D stay consistent while the player looks around.
 	var input := Vector2(
-		float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A)),
-		float(Input.is_key_pressed(KEY_S)) - float(Input.is_key_pressed(KEY_W))
+		Input.get_action_strength("move_right") - Input.get_action_strength("move_left"),
+		Input.get_action_strength("move_back") - Input.get_action_strength("move_forward")
 	)
 	if input.length() > 1.0:
 		input = input.normalized()
@@ -693,7 +781,7 @@ func _move_player(delta: float) -> void:
 	if direction.length() > 1.0:
 		direction = direction.normalized()
 
-	var sprinting := Input.is_key_pressed(KEY_SHIFT)
+	var sprinting := Input.is_action_pressed("sprint")
 	var target_speed := PLAYER_SPEED * (1.55 if sprinting else 1.0)
 	var acceleration := 24.0 if direction.length() > 0.01 else 32.0
 	var target_x := direction.x * target_speed
@@ -712,7 +800,7 @@ func _move_player(delta: float) -> void:
 		_play_person_animation(player_anim_player, "idle")
 
 	if player.is_on_floor():
-		if Input.is_key_pressed(KEY_SPACE) and player.velocity.y <= 0.0:
+		if Input.is_action_pressed("jump") and player.velocity.y <= 0.0:
 			player.velocity.y = 6.0
 	else:
 		player.velocity.y -= 18.0 * delta
@@ -805,8 +893,8 @@ func _update_impact_effects(delta: float) -> void:
 		impact_overlay.color = Color(0.72, 0.015, 0.025, 0.0)
 
 func _drive_car(delta: float) -> void:
-	var throttle := float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S))
-	var steer := float(Input.is_key_pressed(KEY_A)) - float(Input.is_key_pressed(KEY_D))
+	var throttle := Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
+	var steer := Input.get_action_strength("move_left") - Input.get_action_strength("move_right")
 	car_velocity = move_toward(car_velocity, throttle * CAR_SPEED, (22.0 if throttle != 0 else 12.0) * delta)
 	if abs(car_velocity) > 0.5:
 		car_yaw += steer * delta * 1.55 * sign(car_velocity) * clamp(abs(car_velocity) / 12.0, 0.25, 1.0)
