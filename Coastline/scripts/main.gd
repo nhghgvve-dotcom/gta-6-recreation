@@ -1999,3 +1999,168 @@ func _spawn_npc_ragdoll(npc: Node3D) -> void:
 	var fall_tween := create_tween()
 	fall_tween.tween_property(npc, "rotation:z", PI * 0.42, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	fall_tween.tween_interval(2.0)
+	fall_tween.tween_callback(npc.queue_free)
+
+func _spawn_impact_sparks(origin: Vector3) -> void:
+	# Abstract red impact particles: decorative game feedback, not injury detail.
+	for i in range(12):
+		var spark := MeshInstance3D.new()
+		var mesh := SphereMesh.new()
+		mesh.radius = rng.randf_range(0.035, 0.065)
+		mesh.height = mesh.radius * 2.0
+		spark.mesh = mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color(1.0, 0.12, 0.08, 1.0)
+		material.emission_enabled = true
+		material.emission = Color(1.0, 0.035, 0.015)
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		spark.material_override = material
+		spark.global_position = origin
+		add_child(spark)
+		var direction := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(0.1, 1.0), rng.randf_range(-1.0, 1.0)).normalized()
+		var tween := create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(spark, "global_position", origin + direction * rng.randf_range(0.55, 1.25), 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(spark, "scale", Vector3.ZERO, 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		tween.chain().tween_callback(spark.queue_free)
+
+func _trigger_impact_effect() -> void:
+	var impact_strength: float = clampf(abs(car_velocity) / CAR_SPEED, 0.25, 1.0)
+	impact_shake_time = max(impact_shake_time, 0.28)
+	impact_shake_strength = max(impact_shake_strength, 0.035 + impact_strength * 0.075)
+	impact_flash_time = max(impact_flash_time, 0.32)
+
+func _update_impact_effects(delta: float) -> void:
+	impact_shake_time = max(0.0, impact_shake_time - delta)
+	impact_flash_time = max(0.0, impact_flash_time - delta)
+	if impact_shake_time > 0.0:
+		var fade := impact_shake_time / 0.28
+		camera.rotation = Vector3(
+			rng.randf_range(-1.0, 1.0) * impact_shake_strength * fade,
+			rng.randf_range(-1.0, 1.0) * impact_shake_strength * fade,
+			rng.randf_range(-1.0, 1.0) * impact_shake_strength * fade * 0.45
+		)
+	else:
+		camera.rotation = Vector3.ZERO
+	if impact_flash_time > 0.0:
+		impact_overlay.color = Color(0.72, 0.015, 0.025, 0.42 * (impact_flash_time / 0.32))
+	else:
+		impact_overlay.color = Color(0.72, 0.015, 0.025, 0.0)
+
+func _drive_car(delta: float) -> void:
+	var throttle := Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
+	var steer := Input.get_action_strength("move_left") - Input.get_action_strength("move_right")
+	car_velocity = move_toward(car_velocity, throttle * CAR_SPEED, (22.0 if throttle != 0 else 12.0) * delta)
+	if abs(car_velocity) > 0.5:
+		car_yaw += steer * delta * 1.55 * sign(car_velocity) * clamp(abs(car_velocity) / 12.0, 0.25, 1.0)
+	car.rotation.y = car_yaw
+	car.position += -car.global_transform.basis.z * car_velocity * delta
+	car.position.x = clamp(car.position.x, -238, 238)
+	car.position.z = clamp(car.position.z, -238, 238)
+	car.position.y = -0.2
+	_check_car_pedestrian_collisions()
+	if Input.is_action_pressed("vehicle_brake"):
+		car_velocity = move_toward(car_velocity, 0, 28 * delta)
+	if vr_enabled:
+		# Keep the headset rig seated in the moving car and aligned with its heading.
+		player.global_position = car.global_position + Vector3(0, 0.65, 0)
+		player.rotation.y = car_yaw
+
+func _try_enter_nearest_car() -> void:
+	var nearest_car: Node3D = null
+	var nearest_distance := 4.5
+	for candidate in available_cars:
+		if not is_instance_valid(candidate):
+			continue
+		var distance := player.global_position.distance_to(candidate.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_car = candidate
+	if nearest_car == null:
+		return
+	if nearest_car != car:
+		# Arcade-style vehicle takeover: the nearby traffic car pauses and
+		# becomes driveable; no real-world theft instructions are represented.
+		var traffic_index := traffic_cars.find(nearest_car)
+		if traffic_index >= 0:
+			traffic_cars.remove_at(traffic_index)
+			traffic_speeds.remove_at(traffic_index)
+		car = nearest_car
+		car_model = car.get_node_or_null("TrafficSportsCoupe") as Node3D
+		car_wheels.clear()
+		if car_model:
+			_create_vehicle_interior(car_model)
+			_collect_car_wheels(car_model)
+		_react_to_vehicle_takeover()
+		_raise_wanted_level()
+	_enter_car()
+
+func _react_to_vehicle_takeover() -> void:
+	var nearest_npc: Node3D = null
+	var nearest_distance := 9.0
+	for npc in npcs:
+		if not is_instance_valid(npc):
+			continue
+		var distance := npc.global_position.distance_to(car.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_npc = npc
+	if nearest_npc:
+		var key := nearest_npc.get_instance_id()
+		npc_states[key] = "startled"
+		npc_alert_times[key] = 0.9
+		npc_directions[key] = -1.0 if nearest_npc.global_position.x < car.global_position.x else 1.0
+
+func _enter_car() -> void:
+	if car_entry_in_progress:
+		return
+	car_entry_in_progress = true
+	player.velocity = Vector3.ZERO
+	door_audio.pitch_scale = rng.randf_range(0.92, 1.08)
+	door_audio.play()
+	_play_person_animation(player_anim_player, "walk")
+	var door_position := car.global_position + car.global_transform.basis.x * 1.25 + Vector3(0, 0.15, 0)
+	var seat_position := car.global_position + Vector3(0, 0.65, 0)
+	var entry_tween := create_tween()
+	entry_tween.tween_property(player, "global_position", door_position, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	entry_tween.parallel().tween_property(player, "rotation:y", car.rotation.y + PI * 0.5, 0.35)
+	entry_tween.tween_property(player, "global_position", seat_position, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	entry_tween.tween_callback(_finish_enter_car)
+
+func _finish_enter_car() -> void:
+	car_entry_in_progress = false
+	driving = true
+	player.visible = false
+	car_yaw = car.rotation.y
+	if vr_enabled:
+		player.rotation.y = car_yaw
+	camera_pivot.rotation.x = -0.12
+	engine_audio.play()
+
+func _exit_car() -> void:
+	driving = false
+	player.visible = true
+	player.global_position = car.global_position + car.global_transform.basis.x * 2.4 + Vector3(0, 0.5, 0)
+	player.velocity = Vector3.ZERO
+	# The camera pivot is a child of the player. While driving it is positioned
+	# in world space beside the moving car; restore its local offset on exit so
+	# the car's distance from the original spawn can never create a huge offset.
+	camera_pivot.position = Vector3(0, 1.45, 0)
+	camera_pivot.rotation = Vector3(-0.12, 0.0, 0)
+	camera_spring.spring_length = 6.0
+	camera.fov = 74.0
+	car_velocity = 0.0
+	if engine_audio.playing:
+		engine_audio.stop()
+	door_audio.pitch_scale = rng.randf_range(0.92, 1.08)
+	door_audio.play()
+
+func _update_camera() -> void:
+	if driving:
+		camera_pivot.global_position = car.global_position + Vector3(0, 1.9, 0)
+		camera_pivot.rotation.y = car_yaw - player.rotation.y
+	else:
+		# The player root already carries the mouse-look yaw. Keeping the child
+		# pivot at zero avoids doubling the camera rotation and skewing controls.
+		camera_pivot.position = Vector3(0, 1.45, 0)
+		camera_pivot.rotation.y = 0.0
