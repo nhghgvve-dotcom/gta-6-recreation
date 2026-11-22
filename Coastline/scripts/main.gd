@@ -20,6 +20,9 @@ var camera_spring: SpringArm3D
 var car: Node3D
 var car_model: Node3D
 var car_wheels: Array[Node3D] = []
+var traffic_cars: Array[Node3D] = []
+var traffic_speeds: Array[float] = []
+var car_entry_in_progress := false
 var driving := false
 var car_velocity := 0.0
 var car_yaw := 0.0
@@ -57,6 +60,7 @@ func _ready() -> void:
 	_create_player()
 	_create_npcs()
 	_create_car()
+	_create_traffic()
 	_create_hud()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -574,6 +578,43 @@ func _animate_car_wheels(delta: float) -> void:
 		if is_instance_valid(wheel):
 			wheel.rotate_object_local(Vector3.RIGHT, wheel_rotation)
 
+func _create_traffic() -> void:
+	var vehicle_scene := load("res://assets/vehicles/sports-car.glb") as PackedScene
+	if vehicle_scene == null:
+		push_warning("Traffic cars unavailable: sports car model did not load.")
+		return
+	var road_x_positions := [-150.0, -60.0, 30.0, 120.0, 210.0]
+	var start_z_positions := [-165.0, -85.0, -5.0, 75.0, 155.0]
+	for i in range(road_x_positions.size()):
+		var traffic_car := Node3D.new()
+		traffic_car.name = "TrafficCar_%02d" % i
+		traffic_car.position = Vector3(road_x_positions[i], -0.01, start_z_positions[i])
+		var speed := 8.0 + float(i % 3) * 1.4
+		if i % 2 == 1:
+			speed = -speed
+			traffic_car.rotation.y = PI
+		add_child(traffic_car)
+		var model := vehicle_scene.instantiate() as Node3D
+		if model == null:
+			traffic_car.queue_free()
+			continue
+		model.name = "TrafficSportsCoupe"
+		model.rotation.y = PI
+		traffic_car.add_child(model)
+		traffic_cars.append(traffic_car)
+		traffic_speeds.append(speed)
+
+func _update_traffic(delta: float) -> void:
+	for i in range(traffic_cars.size()):
+		var traffic_car := traffic_cars[i]
+		if not is_instance_valid(traffic_car):
+			continue
+		traffic_car.position.z += traffic_speeds[i] * delta
+		if traffic_speeds[i] > 0.0 and traffic_car.position.z > 205.0:
+			traffic_car.position.z = -205.0
+		elif traffic_speeds[i] < 0.0 and traffic_car.position.z < -205.0:
+			traffic_car.position.z = 205.0
+
 func _create_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -775,6 +816,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
 	if is_paused:
+		return
+	_update_traffic(delta)
+	if car_entry_in_progress:
+		_update_camera()
+		_update_hud()
 		return
 	_controller_look(delta)
 	_update_npcs(delta)
@@ -984,6 +1030,21 @@ func _drive_car(delta: float) -> void:
 		car_velocity = move_toward(car_velocity, 0, 28 * delta)
 
 func _enter_car() -> void:
+	if car_entry_in_progress:
+		return
+	car_entry_in_progress = true
+	player.velocity = Vector3.ZERO
+	_play_person_animation(player_anim_player, "walk")
+	var door_position := car.global_position + car.global_transform.basis.x * 1.25 + Vector3(0, 0.15, 0)
+	var seat_position := car.global_position + Vector3(0, 0.65, 0)
+	var entry_tween := create_tween()
+	entry_tween.tween_property(player, "global_position", door_position, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	entry_tween.parallel().tween_property(player, "rotation:y", car.rotation.y + PI * 0.5, 0.35)
+	entry_tween.tween_property(player, "global_position", seat_position, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	entry_tween.tween_callback(_finish_enter_car)
+
+func _finish_enter_car() -> void:
+	car_entry_in_progress = false
 	driving = true
 	player.visible = false
 	car_yaw = car.rotation.y
