@@ -74,6 +74,8 @@ var xr_interface: XRInterface
 var vr_enabled := false
 var vr_left_hand: XRController3D
 var vr_right_hand: XRController3D
+var xr_origin: XROrigin3D
+var xr_camera: XRCamera3D
 
 func _ready() -> void:
 	_setup_controller_inputs()
@@ -105,16 +107,7 @@ func _setup_vr() -> void:
 	get_viewport().use_xr = true
 	vr_enabled = true
 	print("Coastline VR enabled through OpenXR.")
-	vr_left_hand = XRController3D.new()
-	vr_left_hand.name = "VRLeftController"
-	vr_left_hand.tracker = "left_hand"
-	vr_left_hand.pose = "default"
-	add_child(vr_left_hand)
-	vr_right_hand = XRController3D.new()
-	vr_right_hand.name = "VRRightController"
-	vr_right_hand.tracker = "right_hand"
-	vr_right_hand.pose = "default"
-	add_child(vr_right_hand)
+	# Tracked controllers are attached under XROrigin once the player rig exists.
 
 func _setup_environment() -> void:
 	var world_env := WorldEnvironment.new()
@@ -430,6 +423,26 @@ func _create_player() -> void:
 	camera = Camera3D.new()
 	camera.fov = 74
 	camera_spring.add_child(camera)
+	if vr_enabled:
+		camera.current = false
+		xr_origin = XROrigin3D.new()
+		xr_origin.name = "XROrigin"
+		xr_origin.position.y = -0.55
+		player.add_child(xr_origin)
+		xr_camera = XRCamera3D.new()
+		xr_camera.name = "XRCamera"
+		xr_origin.add_child(xr_camera)
+		xr_camera.current = true
+		vr_left_hand = XRController3D.new()
+		vr_left_hand.name = "VRLeftController"
+		vr_left_hand.tracker = "left_hand"
+		vr_left_hand.pose = "default"
+		xr_origin.add_child(vr_left_hand)
+		vr_right_hand = XRController3D.new()
+		vr_right_hand.name = "VRRightController"
+		vr_right_hand.tracker = "right_hand"
+		vr_right_hand.pose = "default"
+		xr_origin.add_child(vr_right_hand)
 	_create_weapon_visual()
 
 func _instantiate_person(model_name: String) -> Node3D:
@@ -1270,8 +1283,9 @@ func _move_player(delta: float) -> void:
 	if input.length() > 1.0:
 		input = input.normalized()
 
-	var forward := -camera_pivot.global_transform.basis.z
-	var right := camera_pivot.global_transform.basis.x
+	var view_basis: Basis = xr_camera.global_transform.basis if vr_enabled and xr_camera != null else camera_pivot.global_transform.basis
+	var forward := -view_basis.z
+	var right := view_basis.x
 	forward.y = 0.0
 	right.y = 0.0
 	forward = forward.normalized()
