@@ -32,11 +32,11 @@ jobs:
           curl -fL https://models.vinish.dev/people/doctor.glb -o Coastline/assets/people/doctor.glb
           curl -fL https://models.vinish.dev/people/runner-woman.glb -o Coastline/assets/people/runner.glb
 
-      - name: Download detailed CC0 sedan model
+      - name: Download Godot-compatible detailed CC0 compact car model
         run: |
           mkdir -p Coastline/assets/vehicles
-          curl -fL https://tevy.dev/models/family-sedan/v1/lod1.glb -o Coastline/assets/vehicles/family-sedan.glb
-          test -s Coastline/assets/vehicles/family-sedan.glb
+          curl -fL https://grab3d.com/dl/compact-car/compact-car.glb -o Coastline/assets/vehicles/compact-car.glb
+          test -s Coastline/assets/vehicles/compact-car.glb
 
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
