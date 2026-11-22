@@ -62,6 +62,11 @@ var police_officer_scene: PackedScene
 var police_helicopter_scene: PackedScene
 var police_car_scene: PackedScene
 var police_units: Array[Node3D] = []
+var police_foot_units: Array[Node3D] = []
+var police_fire_cooldowns: Dictionary = {}
+var player_hits := 0
+var player_dead := false
+var death_layer: CanvasLayer
 var police_helicopter: Node3D
 var police_rotors: Array[Node3D] = []
 var helicopter_orbit := 0.0
@@ -721,6 +726,10 @@ func _update_police_response(delta: float) -> void:
 			officer.global_position += offset.normalized() * 15.0 * delta
 		if offset.length() > 0.25:
 			officer.look_at(Vector3(target.x, officer.global_position.y, target.z), Vector3.UP)
+		if officer.global_position.distance_to(target) < 19.0:
+			_deploy_police_officer(officer, i)
+
+	_update_police_foot_units(delta, target)
 
 	if wanted_level > 3 and police_helicopter == null and police_helicopter_scene != null:
 		police_helicopter = police_helicopter_scene.instantiate() as Node3D
@@ -750,6 +759,117 @@ func _update_police_response(delta: float) -> void:
 		for rotor in police_rotors:
 			if is_instance_valid(rotor):
 				rotor.rotate_y(delta * 18.0)
+
+
+func _deploy_police_officer(patrol_car: Node3D, index: int) -> void:
+	if police_officer_scene == null or bool(patrol_car.get_meta("officers_deployed", false)):
+		return
+	patrol_car.set_meta("officers_deployed", true)
+	var officer := police_officer_scene.instantiate() as Node3D
+	if officer == null:
+		return
+	officer.name = "PoliceOfficerOnFoot_%02d" % index
+	officer.scale = Vector3.ONE * 0.52
+	add_child(officer)
+	var side := -1.0 if index % 2 == 0 else 1.0
+	officer.global_position = patrol_car.global_position + Vector3(side * 2.4, 0.0, 1.0)
+	police_foot_units.append(officer)
+	police_fire_cooldowns[officer.get_instance_id()] = 0.8
+	# The driver model stays with the parked patrol car; this officer is the
+	# separate on-foot unit that approaches and fires arcade energy bolts.
+
+func _update_police_foot_units(delta: float, target: Vector3) -> void:
+	for officer in police_foot_units:
+		if not is_instance_valid(officer):
+			continue
+		var offset := target - officer.global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance > 7.5:
+			officer.global_position += offset.normalized() * minf(5.5 * delta, distance - 7.5)
+		if distance > 0.2:
+			officer.look_at(Vector3(target.x, officer.global_position.y, target.z), Vector3.UP)
+		var key := officer.get_instance_id()
+		var cooldown: float = float(police_fire_cooldowns.get(key, 0.0))
+		cooldown = maxf(0.0, cooldown - delta)
+		if distance < 32.0 and cooldown <= 0.0 and not player_dead:
+			_spawn_police_energy_bolt(officer, target)
+			cooldown = 1.25
+		police_fire_cooldowns[key] = cooldown
+
+func _spawn_police_energy_bolt(officer: Node3D, target: Vector3) -> void:
+	var bolt := MeshInstance3D.new()
+	bolt.name = "PoliceArcadeBolt"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.10
+	mesh.height = 0.20
+	bolt.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.24, 0.12)
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.08, 0.025)
+	material.emission_energy_multiplier = 2.0
+	bolt.material_override = material
+	add_child(bolt)
+	var start := officer.global_position + Vector3(0.0, 1.15, 0.0)
+	var finish := target + Vector3(0.0, 0.9, 0.0)
+	bolt.global_position = start
+	var tween := create_tween()
+	tween.tween_property(bolt, "global_position", finish, 0.24).set_trans(Tween.TRANS_LINEAR)
+	tween.tween_callback(Callable(self, "_apply_police_hit"))
+	tween.tween_callback(bolt.queue_free)
+
+func _apply_police_hit() -> void:
+	if player_dead:
+		return
+	player_hits += 1
+	impact_flash_time = maxf(impact_flash_time, 0.22)
+	impact_shake_time = maxf(impact_shake_time, 0.16)
+	impact_shake_strength = maxf(impact_shake_strength, 0.045)
+	if player_hits >= 10:
+		_show_wasted_screen()
+
+func _show_wasted_screen() -> void:
+	if player_dead:
+		return
+	player_dead = true
+	death_layer = CanvasLayer.new()
+	death_layer.name = "WastedScreen"
+	death_layer.layer = 30
+	death_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(death_layer)
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.015, 0.005, 0.012, 0.78)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	death_layer.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.add_child(center)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 18)
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	center.add_child(stack)
+	var title := Label.new()
+	title.text = "WASTED"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 76)
+	title.add_theme_color_override("font_color", Color(0.94, 0.08, 0.10))
+	title.add_theme_color_override("font_outline_color", Color(0.02, 0.01, 0.015, 1.0))
+	title.add_theme_constant_override("outline_size", 7)
+	stack.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = "You were stopped by the Coastline police."
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 18)
+	subtitle.add_theme_color_override("font_color", Color(0.9, 0.88, 0.9))
+	stack.add_child(subtitle)
+	var restart_button := _make_pause_button("RESTART")
+	restart_button.custom_minimum_size = Vector2(220, 48)
+	restart_button.pressed.connect(_restart_game)
+	stack.add_child(restart_button)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _create_car() -> void:
 	car = Node3D.new()
@@ -985,6 +1105,8 @@ func _update_hud() -> void:
 		speed_label.text = "ON FOOT"
 
 func _unhandled_input(event: InputEvent) -> void:
+	if player_dead:
+		return
 	if event.is_action_pressed("weapon_wheel") and not is_paused:
 		weapon_menu_open = true
 		weapon_menu_layer.visible = true
@@ -1029,7 +1151,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_try_enter_nearest_car()
 
 func _physics_process(delta: float) -> void:
-	if is_paused:
+	if is_paused or player_dead:
 		return
 	_update_traffic(delta)
 	_update_police_response(delta)
