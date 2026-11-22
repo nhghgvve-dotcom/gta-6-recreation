@@ -22,6 +22,7 @@ var car_model: Node3D
 var car_wheels: Array[Node3D] = []
 var traffic_cars: Array[Node3D] = []
 var traffic_speeds: Array[float] = []
+var available_cars: Array[Node3D] = []
 var car_entry_in_progress := false
 var driving := false
 var car_velocity := 0.0
@@ -561,6 +562,7 @@ func _create_car() -> void:
 	car_model.rotation.y = PI
 	car.add_child(car_model)
 	_collect_car_wheels(car_model)
+	available_cars.append(car)
 
 func _collect_car_wheels(node: Node) -> void:
 	for child in node.get_children():
@@ -603,6 +605,7 @@ func _create_traffic() -> void:
 		traffic_car.add_child(model)
 		traffic_cars.append(traffic_car)
 		traffic_speeds.append(speed)
+		available_cars.append(traffic_car)
 
 func _update_traffic(delta: float) -> void:
 	for i in range(traffic_cars.size()):
@@ -767,7 +770,7 @@ func _update_hud() -> void:
 		help_label.text = "WASD / Left Stick Drive   •   Right Stick Look   •   E / Y Exit   •   LB Wheel"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
 	else:
-		help_label.text = "WASD / Left Stick Move   •   Shift / L3 Run   •   Space / A Jump   •   E / Y Car   •   K / LB Wheel   •   LMB / RT Fire"
+		help_label.text = "WASD / Left Stick Move   •   Shift / L3 Run   •   Space / A Jump   •   E / Y Enter or take nearby car   •   K / LB Wheel   •   LMB / RT Fire"
 		speed_label.text = "ON FOOT"
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -811,8 +814,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact"):
 		if driving:
 			_exit_car()
-		elif player.global_position.distance_to(car.global_position) < 4.5:
-			_enter_car()
+		else:
+			_try_enter_nearest_car()
 
 func _physics_process(delta: float) -> void:
 	if is_paused:
@@ -1028,6 +1031,49 @@ func _drive_car(delta: float) -> void:
 	_check_car_pedestrian_collisions()
 	if Input.is_key_pressed(KEY_SPACE):
 		car_velocity = move_toward(car_velocity, 0, 28 * delta)
+
+func _try_enter_nearest_car() -> void:
+	var nearest_car: Node3D = null
+	var nearest_distance := 4.5
+	for candidate in available_cars:
+		if not is_instance_valid(candidate):
+			continue
+		var distance := player.global_position.distance_to(candidate.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_car = candidate
+	if nearest_car == null:
+		return
+	if nearest_car != car:
+		# Arcade-style vehicle takeover: the nearby traffic car pauses and
+		# becomes driveable; no real-world theft instructions are represented.
+		var traffic_index := traffic_cars.find(nearest_car)
+		if traffic_index >= 0:
+			traffic_cars.remove_at(traffic_index)
+			traffic_speeds.remove_at(traffic_index)
+		car = nearest_car
+		car_model = car.get_node_or_null("TrafficSportsCoupe") as Node3D
+		car_wheels.clear()
+		if car_model:
+			_collect_car_wheels(car_model)
+		_react_to_vehicle_takeover()
+	_enter_car()
+
+func _react_to_vehicle_takeover() -> void:
+	var nearest_npc: Node3D = null
+	var nearest_distance := 9.0
+	for npc in npcs:
+		if not is_instance_valid(npc):
+			continue
+		var distance := npc.global_position.distance_to(car.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_npc = npc
+	if nearest_npc:
+		var key := nearest_npc.get_instance_id()
+		npc_states[key] = "startled"
+		npc_alert_times[key] = 0.9
+		npc_directions[key] = -1.0 if nearest_npc.global_position.x < car.global_position.x else 1.0
 
 func _enter_car() -> void:
 	if car_entry_in_progress:
