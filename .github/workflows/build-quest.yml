@@ -64,7 +64,7 @@ jobs:
         run: godot --headless --editor --path Coastline --quit
 
       - name: Install Godot Android build template
-        run: godot --headless --editor --path Coastline --install-android-build-template
+        run: timeout 240s godot --headless --editor --path Coastline --install-android-build-template --quit
 
       - name: Run project startup smoke test
         run: |
