@@ -80,6 +80,13 @@ var vr_left_hand_model: Node3D
 var vr_right_hand_model: Node3D
 var tracked_left_hand: XRNode3D
 var tracked_right_hand: XRNode3D
+var mission_state := "available"
+var mission_cash := 0
+var mission_tokens := 0
+var mission_marker: Node3D
+var getaway_marker: Node3D
+var mission_pickups: Array[Node3D] = []
+var mission_status_label: Label
 
 func _ready() -> void:
 	_setup_controller_inputs()
@@ -89,6 +96,7 @@ func _ready() -> void:
 	_setup_environment()
 	_setup_audio()
 	_build_world()
+	_create_mission_world()
 	_create_player()
 	_create_npcs()
 	_create_car()
@@ -1146,9 +1154,121 @@ func _create_hud() -> void:
 	impact_overlay.color = Color(0.72, 0.015, 0.025, 0.0)
 	impact_overlay.z_index = 100
 	layer.add_child(impact_overlay)
+	mission_status_label = Label.new()
+	mission_status_label.position = Vector2(24, 78)
+	mission_status_label.custom_minimum_size = Vector2(440, 90)
+	mission_status_label.add_theme_font_size_override("font_size", 18)
+	mission_status_label.add_theme_color_override("font_color", Color(0.65, 0.94, 1.0))
+	mission_status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	mission_status_label.add_theme_constant_override("shadow_offset_x", 2)
+	mission_status_label.add_theme_constant_override("shadow_offset_y", 2)
+	layer.add_child(mission_status_label)
 	_create_pause_menu()
 	_create_weapon_menu()
 	_update_hud()
+
+func _create_mission_world() -> void:
+	# Fictional arcade mission landmarks; no realistic security or entry mechanics.
+	var bank := Node3D.new()
+	bank.name = "CoastlineBank"
+	bank.position = Vector3(190, 0, 215)
+	add_child(bank)
+	var stone := _mat(Color(0.72, 0.76, 0.78), 0.62)
+	var glass := _mat(Color(0.08, 0.48, 0.62), 0.2, 0.25)
+	var gold := _mat(Color(0.98, 0.72, 0.22), 0.3, 0.25)
+	_static_box(bank, Vector3(0, 5.5, 0), Vector3(28, 11, 22), stone)
+	_mesh_box(bank, Vector3(0, 10.9, 0), Vector3(29, 0.8, 23), gold, "BankRoofTrim")
+	_mesh_box(bank, Vector3(0, 4.8, -11.15), Vector3(12, 5.2, 0.3), glass, "BankFrontWindows")
+	_mesh_box(bank, Vector3(0, 2.0, -11.3), Vector3(3.0, 4.0, 0.5), gold, "BankEntrance")
+	var sign_label := Label3D.new()
+	sign_label.text = "COASTLINE BANK"
+	sign_label.font_size = 64
+	sign_label.pixel_size = 0.006
+	sign_label.position = Vector3(0, 9.0, -11.7)
+	sign_label.modulate = Color(1.0, 0.83, 0.42)
+	bank.add_child(sign_label)
+	mission_marker = _create_mission_beacon(Vector3(170, 0.1, 195), Color(0.1, 0.85, 1.0), "START MISSION")
+	getaway_marker = _create_mission_beacon(Vector3(-190, 0.1, -190), Color(0.25, 1.0, 0.55), "GETAWAY")
+	getaway_marker.visible = false
+	for index in range(3):
+		var pickup := _create_mission_beacon(Vector3(178.0 + float(index) * 7.0, 0.1, 188.0), Color(1.0, 0.72, 0.18), "DATA CHIP")
+		pickup.scale = Vector3(0.48, 0.7, 0.48)
+		pickup.visible = false
+		mission_pickups.append(pickup)
+
+func _create_mission_beacon(at: Vector3, tint: Color, caption: String) -> Node3D:
+	var root := Node3D.new()
+	root.position = at
+	add_child(root)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = tint
+	material.emission_enabled = true
+	material.emission = tint * 0.65
+	var column := MeshInstance3D.new()
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = 0.55
+	cylinder.bottom_radius = 0.75
+	cylinder.height = 0.16
+	column.mesh = cylinder
+	column.material_override = material
+	root.add_child(column)
+	var orb := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.32
+	sphere.height = 0.64
+	orb.mesh = sphere
+	orb.position.y = 1.0
+	orb.material_override = material
+	root.add_child(orb)
+	var label := Label3D.new()
+	label.text = caption
+	label.position.y = 2.0
+	label.font_size = 48
+	label.pixel_size = 0.008
+	label.modulate = tint
+	root.add_child(label)
+	return root
+
+func _try_start_mission() -> bool:
+	if mission_state == "available" or mission_state == "complete":
+		if player.global_position.distance_to(mission_marker.global_position) <= 7.0:
+			mission_state = "collect"
+			mission_tokens = 0
+			for pickup in mission_pickups:
+				pickup.visible = true
+			getaway_marker.visible = false
+			wanted_level = max(wanted_level, 1)
+			return true
+	return false
+
+func _update_mission() -> void:
+	if mission_state == "collect":
+		for pickup in mission_pickups:
+			if pickup.visible and player.global_position.distance_to(pickup.global_position) < 2.4:
+				pickup.visible = false
+				mission_tokens += 1
+			if mission_tokens >= 3:
+				mission_state = "escape"
+				getaway_marker.visible = true
+	elif mission_state == "escape":
+		var target := car.global_position if driving else player.global_position
+		if target.distance_to(getaway_marker.global_position) < 11.0:
+			mission_state = "complete"
+			getaway_marker.visible = false
+			mission_cash += 5000
+			wanted_level = 0
+			for pickup in mission_pickups:
+				pickup.visible = false
+
+func _mission_status_text() -> String:
+	match mission_state:
+		"available", "complete":
+			return "MISSION: THE BIG SCORE\n" + ("COMPLETE  •  $5,000 REWARD\nReturn to the blue marker to replay." if mission_state == "complete" else "Blue marker at Coastline Bank  •  Press E / Y to begin.")
+		"collect":
+			return "THE BIG SCORE  •  OBJECTIVE 1/2\nCollect the 3 glowing data chips: %d/3" % mission_tokens
+		"escape":
+			return "THE BIG SCORE  •  OBJECTIVE 2/2\nReach the green getaway marker. Find a car!"
+	return ""
 
 func _create_pause_menu() -> void:
 	pause_layer = CanvasLayer.new()
@@ -1268,7 +1388,9 @@ func _update_hud() -> void:
 	var wanted_stars := ""
 	for star_index in range(6):
 		wanted_stars += "★" if star_index < wanted_level else "☆"
-	hud.text = "COASTLINE  |  FREE ROAM  |  EQUIPPED: " + selected_weapon + "  |  WANTED: " + wanted_stars
+	hud.text = "COASTLINE  |  " + ("THE BIG SCORE" if mission_state != "available" and mission_state != "complete" else "FREE ROAM") + "  |  CASH: $" + str(mission_cash) + "  |  EQUIPPED: " + selected_weapon + "  |  WANTED: " + wanted_stars
+	if mission_status_label:
+		mission_status_label.text = _mission_status_text()
 	if vr_enabled:
 		help_label.text = "VR: Head tracking active  •  Left stick move  •  Right stick look  •  E / Y interact"
 	elif driving:
@@ -1321,13 +1443,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact"):
 		if driving:
 			_exit_car()
-		else:
+		elif not _try_start_mission():
 			_try_enter_nearest_car()
 
 func _physics_process(delta: float) -> void:
 	if is_paused or player_dead:
 		return
 	_update_vr_hands()
+	_update_mission()
 	_update_traffic(delta)
 	_update_police_response(delta)
 	_update_audio(delta)
