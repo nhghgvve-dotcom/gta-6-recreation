@@ -656,6 +656,33 @@ func _spawn_police_unit(index: int, target: Vector3) -> void:
 	# The patrol-car GLB faces +Z; the chase root faces -Z toward its target.
 	model.rotation.y = PI
 	patrol_car.add_child(model)
+	# Add a recognizable red/blue roof lightbar to the 3D patrol vehicle.
+	var lightbar := MeshInstance3D.new()
+	lightbar.name = "PoliceLightbar"
+	var lightbar_mesh := BoxMesh.new()
+	lightbar_mesh.size = Vector3(1.15, 0.13, 0.28)
+	lightbar.mesh = lightbar_mesh
+	lightbar.position = Vector3(0.0, 1.12, 0.0)
+	var lightbar_material := StandardMaterial3D.new()
+	lightbar_material.albedo_color = Color(0.12, 0.16, 0.2)
+	lightbar_material.metallic = 0.35
+	lightbar.material_override = lightbar_material
+	model.add_child(lightbar)
+	for side in [-1.0, 1.0]:
+		var beacon := MeshInstance3D.new()
+		beacon.name = "PoliceBeacon"
+		var beacon_mesh := BoxMesh.new()
+		beacon_mesh.size = Vector3(0.42, 0.16, 0.25)
+		beacon.mesh = beacon_mesh
+		beacon.position = Vector3(side * 0.29, 1.2, 0.0)
+		var beacon_material := StandardMaterial3D.new()
+		beacon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		beacon_material.albedo_color = Color(0.05, 0.25, 1.0) if side < 0.0 else Color(1.0, 0.04, 0.025)
+		beacon_material.emission_enabled = true
+		beacon_material.emission = beacon_material.albedo_color
+		beacon_material.emission_energy_multiplier = 2.0
+		beacon.material_override = beacon_material
+		model.add_child(beacon)
 	if police_officer_scene != null:
 		var driver := police_officer_scene.instantiate() as Node3D
 		if driver != null:
@@ -680,7 +707,7 @@ func _update_police_response(delta: float) -> void:
 	while police_units.size() < desired_units:
 		_spawn_police_unit(police_units.size(), target)
 	while police_units.size() > desired_units:
-		var removed := police_units.pop_back()
+		var removed: Node3D = police_units.pop_back() as Node3D
 		if is_instance_valid(removed):
 			removed.queue_free()
 	for i in range(police_units.size()):
