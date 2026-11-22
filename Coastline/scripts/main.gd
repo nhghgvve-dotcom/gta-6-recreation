@@ -70,9 +70,14 @@ var death_layer: CanvasLayer
 var police_helicopter: Node3D
 var police_rotors: Array[Node3D] = []
 var helicopter_orbit := 0.0
+var xr_interface: XRInterface
+var vr_enabled := false
+var vr_left_hand: XRController3D
+var vr_right_hand: XRController3D
 
 func _ready() -> void:
 	_setup_controller_inputs()
+	_setup_vr()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	rng.randomize()
 	_setup_environment()
@@ -85,6 +90,31 @@ func _ready() -> void:
 	_load_police_assets()
 	_create_hud()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func _setup_vr() -> void:
+	# OpenXR activates PC-VR when a compatible runtime/headset is available.
+	# If no headset is connected, Coastline remains in regular desktop mode.
+	xr_interface = XRServer.find_interface("OpenXR")
+	if xr_interface == null:
+		print("OpenXR runtime not found; starting desktop mode.")
+		return
+	if not xr_interface.is_initialized() and not xr_interface.initialize():
+		push_warning("OpenXR could not initialize. Starting desktop mode.")
+		xr_interface = null
+		return
+	get_viewport().use_xr = true
+	vr_enabled = true
+	print("Coastline VR enabled through OpenXR.")
+	vr_left_hand = XRController3D.new()
+	vr_left_hand.name = "VRLeftController"
+	vr_left_hand.tracker = "left_hand"
+	vr_left_hand.pose = "default"
+	add_child(vr_left_hand)
+	vr_right_hand = XRController3D.new()
+	vr_right_hand.name = "VRRightController"
+	vr_right_hand.tracker = "right_hand"
+	vr_right_hand.pose = "default"
+	add_child(vr_right_hand)
 
 func _setup_environment() -> void:
 	var world_env := WorldEnvironment.new()
@@ -395,7 +425,7 @@ func _create_player() -> void:
 	camera_spring = SpringArm3D.new()
 	camera_spring.spring_length = 6.0
 	camera_spring.margin = 0.25
-	camera_spring.spring_length = 6.0
+	camera_spring.spring_length = 0.0 if vr_enabled else 6.0
 	camera_pivot.add_child(camera_spring)
 	camera = Camera3D.new()
 	camera.fov = 74
@@ -889,8 +919,62 @@ func _create_car() -> void:
 	# Rotate the model 180 degrees so its nose points away from the player.
 	car_model.rotation.y = PI
 	car.add_child(car_model)
+	_create_vehicle_interior(car_model)
 	_collect_car_wheels(car_model)
 	available_cars.append(car)
+
+
+func _create_vehicle_interior(vehicle_model: Node3D) -> void:
+	# A simple, original cabin is layered inside the exterior mesh so the
+	# dashboard, seats, console and steering wheel are visible in close views.
+	if vehicle_model.has_node("CoastlineInterior"):
+		return
+	var cabin := Node3D.new()
+	cabin.name = "CoastlineInterior"
+	vehicle_model.add_child(cabin)
+	var dark_mat := _mat(Color(0.035, 0.045, 0.06), 0.25)
+	var trim_mat := _mat(Color(0.16, 0.19, 0.23), 0.35)
+	var seat_mat := _mat(Color(0.055, 0.065, 0.08), 0.12)
+	var screen_mat := StandardMaterial3D.new()
+	screen_mat.albedo_color = Color(0.025, 0.28, 0.38)
+	screen_mat.emission_enabled = true
+	screen_mat.emission = Color(0.02, 0.22, 0.34)
+	screen_mat.emission_energy_multiplier = 1.2
+	_add_cabin_box(cabin, "Dashboard", Vector3(1.55, 0.28, 0.42), Vector3(0.0, 0.88, -0.72), dark_mat)
+	_add_cabin_box(cabin, "DashboardTrim", Vector3(1.35, 0.045, 0.035), Vector3(0.0, 0.76, -0.49), trim_mat)
+	_add_cabin_box(cabin, "CenterConsole", Vector3(0.28, 0.18, 0.72), Vector3(0.0, 0.53, -0.05), trim_mat)
+	_add_cabin_box(cabin, "InfotainmentScreen", Vector3(0.34, 0.22, 0.035), Vector3(0.0, 0.93, -0.49), screen_mat)
+	for side in [-1.0, 1.0]:
+		var seat_x := side * 0.43
+		_add_cabin_box(cabin, "SeatCushion", Vector3(0.58, 0.18, 0.58), Vector3(seat_x, 0.48, 0.24), seat_mat)
+		var backrest := _add_cabin_box(cabin, "SeatBackrest", Vector3(0.58, 0.78, 0.18), Vector3(seat_x, 0.88, 0.48), seat_mat)
+		backrest.rotation.x = -0.10
+		_add_cabin_box(cabin, "HeadRest", Vector3(0.34, 0.22, 0.16), Vector3(seat_x, 1.35, 0.50), dark_mat)
+	_add_cabin_box(cabin, "SteeringColumn", Vector3(0.10, 0.10, 0.42), Vector3(-0.43, 0.82, -0.40), trim_mat)
+	var steering_wheel := MeshInstance3D.new()
+	steering_wheel.name = "SteeringWheel"
+	var wheel_mesh := TorusMesh.new()
+	wheel_mesh.inner_radius = 0.20
+	wheel_mesh.outer_radius = 0.245
+	steering_wheel.mesh = wheel_mesh
+	steering_wheel.material_override = dark_mat
+	steering_wheel.position = Vector3(-0.43, 0.91, -0.58)
+	steering_wheel.rotation.x = PI * 0.5
+	cabin.add_child(steering_wheel)
+	_add_cabin_box(cabin, "InstrumentCluster", Vector3(0.38, 0.12, 0.10), Vector3(-0.43, 1.02, -0.76), screen_mat)
+	_add_cabin_box(cabin, "DoorArmrestLeft", Vector3(0.12, 0.12, 0.72), Vector3(-0.82, 0.58, 0.12), trim_mat)
+	_add_cabin_box(cabin, "DoorArmrestRight", Vector3(0.12, 0.12, 0.72), Vector3(0.82, 0.58, 0.12), trim_mat)
+
+func _add_cabin_box(parent: Node3D, part_name: String, dimensions: Vector3, local_position: Vector3, material: Material) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = part_name
+	var mesh := BoxMesh.new()
+	mesh.size = dimensions
+	part.mesh = mesh
+	part.material_override = material
+	part.position = local_position
+	parent.add_child(part)
+	return part
 
 func _collect_car_wheels(node: Node) -> void:
 	for child in node.get_children():
@@ -1097,7 +1181,9 @@ func _update_hud() -> void:
 	for star_index in range(6):
 		wanted_stars += "★" if star_index < wanted_level else "☆"
 	hud.text = "COASTLINE  |  FREE ROAM  |  EQUIPPED: " + selected_weapon + "  |  WANTED: " + wanted_stars
-	if driving:
+	if vr_enabled:
+		help_label.text = "VR: Head tracking active  •  Left stick move  •  Right stick look  •  E / Y interact"
+	elif driving:
 		help_label.text = "WASD / Left Stick Drive   •   Right Stick Look   •   E / Y Exit   •   LB Wheel"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
 	else:
@@ -1404,6 +1490,7 @@ func _try_enter_nearest_car() -> void:
 		car_model = car.get_node_or_null("TrafficSportsCoupe") as Node3D
 		car_wheels.clear()
 		if car_model:
+			_create_vehicle_interior(car_model)
 			_collect_car_wheels(car_model)
 		_react_to_vehicle_takeover()
 		_raise_wanted_level()
