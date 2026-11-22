@@ -91,6 +91,12 @@ var mission_marker: Node3D
 var getaway_marker: Node3D
 var mission_pickups: Array[Node3D] = []
 var mission_status_label: Label
+var mobile_controls_root: Control
+var mobile_joystick_knob: Panel
+var mobile_joystick_touch_id := -1
+var mobile_look_touch_id := -1
+var mobile_joystick_center := Vector2.ZERO
+var mobile_joystick_radius := 58.0
 
 func _ready() -> void:
 	_setup_controller_inputs()
@@ -1178,6 +1184,7 @@ func _create_hud() -> void:
 	layer.add_child(mission_status_label)
 	_create_pause_menu()
 	_create_weapon_menu()
+	_create_mobile_controls(layer)
 	_update_hud()
 
 func _create_mission_world() -> void:
@@ -1535,12 +1542,173 @@ func _update_hud() -> void:
 		mission_status_label.text = _mission_status_text()
 	if vr_enabled:
 		help_label.text = "VR: Head tracking active  •  Left stick move  •  Right stick look  •  E / Y interact"
+	elif OS.get_name() == "Android" or OS.get_name() == "iOS":
+		help_label.text = "Touch joystick: move / steer   •   Drag right side: look   •   ACTION: enter / exit / mission"
+		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0) if driving else "ON FOOT"
 	elif driving:
 		help_label.text = "WASD / Left Stick Drive   •   Right Stick Look   •   E / Y Exit   •   LB Wheel"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
 	else:
 		help_label.text = "WASD / Left Stick Move   •   Shift / L3 Run   •   Space / A Jump   •   E / Y Enter or take nearby car   •   K / LB Wheel   •   LMB / RT Fire"
 		speed_label.text = "ON FOOT"
+
+func _create_mobile_controls(layer: CanvasLayer) -> void:
+	if OS.get_name() != "Android" and OS.get_name() != "iOS":
+		return
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	mobile_controls_root = Control.new()
+	mobile_controls_root.name = "MobileTouchControls"
+	mobile_controls_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mobile_controls_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mobile_controls_root.process_mode = Node.PROCESS_MODE_ALWAYS
+	layer.add_child(mobile_controls_root)
+
+	var base := Panel.new()
+	base.name = "MoveJoystickBase"
+	base.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	base.offset_left = 30
+	base.offset_top = -190
+	base.offset_right = 190
+	base.offset_bottom = -30
+	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var base_style := StyleBoxFlat.new()
+	base_style.bg_color = Color(0.04, 0.07, 0.12, 0.48)
+	base_style.border_color = Color(0.72, 0.88, 1.0, 0.7)
+	base_style.set_border_width_all(3)
+	base_style.set_corner_radius_all(80)
+	base.add_theme_stylebox_override("panel", base_style)
+	mobile_controls_root.add_child(base)
+
+	mobile_joystick_knob = Panel.new()
+	mobile_joystick_knob.name = "MoveJoystickKnob"
+	mobile_joystick_knob.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	mobile_joystick_knob.offset_left = 82
+	mobile_joystick_knob.offset_top = -138
+	mobile_joystick_knob.offset_right = 138
+	mobile_joystick_knob.offset_bottom = -82
+	mobile_joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var knob_style := StyleBoxFlat.new()
+	knob_style.bg_color = Color(0.35, 0.72, 1.0, 0.82)
+	knob_style.border_color = Color(0.9, 0.97, 1.0, 0.95)
+	knob_style.set_border_width_all(2)
+	knob_style.set_corner_radius_all(30)
+	mobile_joystick_knob.add_theme_stylebox_override("panel", knob_style)
+	mobile_controls_root.add_child(mobile_joystick_knob)
+
+	_add_mobile_button("ACTION", "interact", -34, -44, true)
+	_add_mobile_button("JUMP", "jump", -156, -44)
+	_add_mobile_button("RUN", "sprint", -34, -122)
+	_add_mobile_button("PAUSE", "pause", -156, -122, true)
+	_add_mobile_button("BRAKE", "vehicle_brake", -34, -200)
+
+func _add_mobile_button(caption: String, action: String, right_offset: float, bottom_offset: float, instant := false) -> void:
+	var button := Button.new()
+	button.text = caption
+	button.custom_minimum_size = Vector2(108, 64)
+	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	button.offset_left = right_offset - 108
+	button.offset_top = bottom_offset - 64
+	button.offset_right = right_offset
+	button.offset_bottom = bottom_offset
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", Color(1, 1, 1))
+	button.add_theme_color_override("font_hover_color", Color(1, 1, 1))
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.035, 0.08, 0.14, 0.76)
+	normal.border_color = Color(0.36, 0.75, 1.0, 0.95)
+	normal.set_border_width_all(2)
+	normal.set_corner_radius_all(16)
+	button.add_theme_stylebox_override("normal", normal)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.12, 0.38, 0.58, 0.94)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("hover", normal)
+	if instant:
+		if action == "pause":
+			button.button_down.connect(func(): _set_paused(not is_paused))
+		else:
+			button.button_down.connect(_mobile_interact)
+	else:
+		button.button_down.connect(func(): Input.action_press(action))
+		button.button_up.connect(func(): Input.action_release(action))
+	mobile_controls_root.add_child(button)
+
+func _mobile_interact() -> void:
+	if player_dead or is_paused:
+		return
+	if driving:
+		_exit_car()
+	elif not _try_start_mission():
+		_try_enter_nearest_car()
+
+func _set_mobile_joystick(point: Vector2) -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	mobile_joystick_center = Vector2(110.0, viewport_size.y - 110.0)
+	var offset := point - mobile_joystick_center
+	if offset.length() > mobile_joystick_radius:
+		offset = offset.normalized() * mobile_joystick_radius
+	var stick := offset / mobile_joystick_radius
+	_set_mobile_axis("move_left", "move_right", stick.x)
+	_set_mobile_axis("move_forward", "move_back", -stick.y)
+	if mobile_joystick_knob:
+		mobile_joystick_knob.offset_left = 82.0 + offset.x
+		mobile_joystick_knob.offset_top = -138.0 + offset.y
+		mobile_joystick_knob.offset_right = 138.0 + offset.x
+		mobile_joystick_knob.offset_bottom = -82.0 + offset.y
+
+func _set_mobile_axis(negative_action: String, positive_action: String, value: float) -> void:
+	if value < -0.2:
+		Input.action_press(negative_action, -value)
+		Input.action_release(positive_action)
+	elif value > 0.2:
+		Input.action_press(positive_action, value)
+		Input.action_release(negative_action)
+	else:
+		Input.action_release(negative_action)
+		Input.action_release(positive_action)
+
+func _release_mobile_joystick() -> void:
+	Input.action_release("move_forward")
+	Input.action_release("move_back")
+	Input.action_release("move_left")
+	Input.action_release("move_right")
+	if mobile_joystick_knob:
+		mobile_joystick_knob.offset_left = 82
+		mobile_joystick_knob.offset_top = -138
+		mobile_joystick_knob.offset_right = 138
+		mobile_joystick_knob.offset_bottom = -82
+
+func _input(event: InputEvent) -> void:
+	if mobile_controls_root == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			if event.position.x < viewport_size.x * 0.36 and event.position.y > viewport_size.y - 230.0:
+				mobile_joystick_touch_id = event.index
+				_set_mobile_joystick(event.position)
+				get_viewport().set_input_as_handled()
+			elif event.position.x > viewport_size.x * 0.42 and event.position.y < viewport_size.y - 205.0:
+				mobile_look_touch_id = event.index
+		else:
+			if event.index == mobile_joystick_touch_id:
+				mobile_joystick_touch_id = -1
+				_release_mobile_joystick()
+				get_viewport().set_input_as_handled()
+			if event.index == mobile_look_touch_id:
+				mobile_look_touch_id = -1
+	elif event is InputEventScreenDrag:
+		if event.index == mobile_joystick_touch_id:
+			_set_mobile_joystick(event.position)
+			get_viewport().set_input_as_handled()
+		elif event.index == mobile_look_touch_id and not is_paused:
+			if driving:
+				car_yaw -= event.relative.x * 0.004
+				camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - event.relative.y * 0.003, -0.45, 0.25)
+			else:
+				player.rotation.y -= event.relative.x * 0.004
+				camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - event.relative.y * 0.003, -0.65, 0.35)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if player_dead:
