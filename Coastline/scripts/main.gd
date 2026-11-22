@@ -38,6 +38,8 @@ var npc_directions: Dictionary = {}
 var npc_walk_times: Dictionary = {}
 var npc_animation_parts: Dictionary = {}
 var npc_walk_phases: Dictionary = {}
+var npc_states: Dictionary = {}
+var npc_alert_times: Dictionary = {}
 var weapon_menu_open := false
 var selected_weapon := "FISTS"
 var weapon_menu_layer: CanvasLayer
@@ -528,6 +530,7 @@ func _create_npcs() -> void:
 		var key := npc.get_instance_id()
 		npc_directions[key] = (1.0 if i % 2 == 0 else -1.0)
 		npc_walk_times[key] = rng.randf_range(2.0, 5.0)
+		npc_states[key] = "walking"
 
 func _create_car() -> void:
 	car = Node3D.new()
@@ -817,20 +820,65 @@ func _move_player(delta: float) -> void:
 	player.global_position.x = clamp(player.global_position.x, -238, 238)
 	player.global_position.z = clamp(player.global_position.z, -238, 238)
 
+func _is_player_aiming_at(npc: Node3D) -> bool:
+	if selected_weapon == "FISTS" or driving or weapon_menu_open or not is_instance_valid(camera):
+		return false
+	var origin := camera.global_position
+	var forward := -camera.global_transform.basis.z.normalized()
+	var target := npc.global_position + Vector3(0, 1.0, 0)
+	var offset := target - origin
+	var distance_along := offset.dot(forward)
+	if distance_along < 0.0 or distance_along > 26.0:
+		return false
+	var closest := origin + forward * distance_along
+	return closest.distance_to(target) < 1.45
+
 func _update_npcs(delta: float) -> void:
 	for npc in npcs:
 		if not is_instance_valid(npc):
 			continue
 		var key := npc.get_instance_id()
+		var state: String = npc_states.get(key, "walking")
 		var direction: float = npc_directions.get(key, 1.0)
 		var remaining: float = npc_walk_times.get(key, 2.0) - delta
-		if remaining <= 0.0:
-			direction *= -1.0
-			remaining = rng.randf_range(2.0, 5.0)
+		if _is_player_aiming_at(npc):
+			if state == "walking":
+				state = "startled"
+				npc_alert_times[key] = 0.7
+			elif state == "startled":
+				var alert_left: float = npc_alert_times.get(key, 0.7) - delta
+				npc_alert_times[key] = alert_left
+				if alert_left <= 0.0:
+					state = "fleeing"
+					direction = sign(npc.global_position.x - player.global_position.x)
+					if abs(direction) < 0.1:
+						direction = -1.0 if player.global_position.z < npc.global_position.z else 1.0
+					npc_alert_times[key] = 2.8
+		elif state == "startled":
+			state = "walking"
+			npc_alert_times.erase(key)
+		elif state == "fleeing":
+			var flee_left: float = npc_alert_times.get(key, 0.0) - delta
+			npc_alert_times[key] = flee_left
+			if flee_left <= 0.0:
+				state = "walking"
+				npc_alert_times.erase(key)
+		if state == "walking":
+			if remaining <= 0.0:
+				direction *= -1.0
+				remaining = rng.randf_range(2.0, 5.0)
+			npc.position.x += direction * 0.75 * delta
+		elif state == "startled":
+			# Brief pause and turn toward the player before deciding to run.
+			npc.rotation.y = atan2(player.global_position.x - npc.global_position.x, player.global_position.z - npc.global_position.z)
+		else:
+			npc.position.x += direction * 3.0 * delta
+		npc_states[key] = state
 		npc_directions[key] = direction
 		npc_walk_times[key] = remaining
-		npc.position.x += direction * 0.75 * delta
-		npc.rotation.y = PI / 2.0 if direction > 0.0 else -PI / 2.0
+		if state != "startled":
+			npc.rotation.y = PI / 2.0 if direction > 0.0 else -PI / 2.0
+		_play_person_animation(npc_anim_players.get(key), "run" if state == "fleeing" else "walk")
 
 func _check_car_pedestrian_collisions() -> void:
 	if abs(car_velocity) < 5.0:
@@ -846,6 +894,8 @@ func _spawn_npc_ragdoll(npc: Node3D) -> void:
 	npcs.erase(npc)
 	npc_directions.erase(key)
 	npc_walk_times.erase(key)
+	npc_states.erase(key)
+	npc_alert_times.erase(key)
 	npc_anim_players.erase(key)
 	_spawn_impact_sparks(origin + Vector3(0, 0.9, 0))
 	# Keep the imported human model intact and give it a brief, non-graphic fall reaction.
