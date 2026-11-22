@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#11152b">
+<title>Coastline — Mobile</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10162a;touch-action:none}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#hud{position:fixed;inset:0;pointer-events:none;color:#fff;text-shadow:0 2px 8px #0009}
+.brand{position:absolute;top:env(safe-area-inset-top,12px);left:14px;padding:9px 13px;border:1px solid #ffffff26;border-radius:13px;background:#10172dbb;backdrop-filter:blur(12px);font-weight:900;letter-spacing:.16em;font-size:12px}
+#mission{position:absolute;top:58px;left:14px;max-width:min(270px,65vw);padding:10px 13px;border:1px solid #ffffff24;border-radius:13px;background:#11172dcc;backdrop-filter:blur(12px);font-size:12px;line-height:1.45}
+#speed{position:absolute;right:14px;top:14px;padding:10px 13px;border-radius:13px;background:#11172dcc;font-weight:800;font-variant-numeric:tabular-nums}
+#hint{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:8px 12px;background:#11172dbb;border-radius:12px;font-size:11px;white-space:nowrap}
+.controls{position:absolute;inset:0;pointer-events:none}
+#stick{position:absolute;left:max(20px,env(safe-area-inset-left));bottom:max(24px,env(safe-area-inset-bottom));width:132px;height:132px;border-radius:50%;background:#dbeaff20;border:1px solid #ffffff55;pointer-events:auto;touch-action:none;backdrop-filter:blur(5px)}
+#knob{position:absolute;width:56px;height:56px;left:38px;top:38px;border-radius:50%;background:#dceaff8c;border:1px solid #fff9;box-shadow:0 4px 18px #0005}
+.actions{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:max(25px,env(safe-area-inset-bottom));display:flex;gap:12px;align-items:flex-end;pointer-events:auto}
+.action{width:68px;height:68px;border-radius:50%;border:1px solid #ffffff70;background:#17233bd9;color:white;font-weight:850;font-size:11px;letter-spacing:.05em;box-shadow:0 5px 18px #0006;touch-action:none}
+.action.primary{width:82px;height:82px;background:#1d9e9aeb;border-color:#9dfff0}
+.action:active{transform:scale(.94);filter:brightness(1.25)}
+#pause{position:absolute;right:14px;top:66px;width:42px;height:42px;border-radius:12px;border:1px solid #ffffff55;background:#11172dcc;color:white;pointer-events:auto;font-size:18px}
+#overlay{position:fixed;inset:0;display:none;place-items:center;background:#080d1bcc;backdrop-filter:blur(10px);color:white;text-align:center}
+#overlay.show{display:grid}.panel{padding:28px;width:min(340px,88vw);border:1px solid #ffffff35;border-radius:22px;background:#17213bee}.panel h1{letter-spacing:.12em}.panel button{padding:12px 24px;border:0;border-radius:12px;background:#28b7aa;color:#061c22;font-weight:900}
+@media(min-width:850px){#stick{width:112px;height:112px}#knob{left:31px;top:31px;width:48px;height:48px}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">
+ <div class="brand">COASTLINE</div>
+ <div id="mission">THE BIG SCORE<br>Find the glowing data chip near the bank.</div>
+ <div id="speed">ON FOOT</div>
+ <div id="hint">Move with the stick · Tap DRIVE to enter a car</div>
+ <button id="pause">Ⅱ</button>
+ <div class="controls">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="actions">
+   <button class="action" id="interact">ACTION</button>
+   <button class="action primary" id="drive">DRIVE</button>
+  </div>
+ </div>
+</div>
+<div id="overlay"><div class="panel"><h1>PAUSED</h1><p>Take a break on the Coastline.</p><button id="resume">RESUME</button></div></div>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const missionEl=document.getElementById('mission'),speedEl=document.getElementById('speed'),hintEl=document.getElementById('hint');
+let W=0,H=0,dpr=1,last=0,paused=false,driving=false,mission=0,chipTaken=false;
+const world={w:2400,h:1900},player={x:1080,y:950,a:0},car={x:1100,y:950,a:0,v:0};
+let cam={x:0,y:0},joy={x:0,y:0},keys={};
+const roads=[-650,-300,50,400,750,1100,1450,1800];
+const buildings=[];
+for(let gx=0;gx<7;gx++)for(let gy=0;gy<5;gy++){
+ const bx=170+gx*315+(gy%2)*30,by=130+gy*350;
+ if(roads.some(r=>Math.abs(bx-r)<95)||roads.some(r=>Math.abs(by-r)<85))continue;
+ buildings.push({x:bx,y:by,w:90+(gx*17+gy*11)%75,h:75+(gx*13+gy*19)%90,c:['#b66f68','#a98aa9','#d1a77c','#6f9aa5','#d0b18d'][(gx+gy)%5]});
+}
+const palms=[];for(let i=0;i<85;i++)palms.push({x:90+(i*197)%2200,y:70+(i*283)%1750});
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+function roundRect(x,y,w,h,r,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function worldDraw(){
+ ctx.fillStyle='#477d56';ctx.fillRect(0,0,world.w,world.h);
+ // ocean and beach along west coast
+ ctx.fillStyle='#087e9a';ctx.fillRect(0,0,105,world.h);ctx.fillStyle='#d5bd87';ctx.fillRect(105,0,70,world.h);
+ // street grid
+ ctx.fillStyle='#343b49';for(const x of roads)ctx.fillRect(x-38,0,76,world.h);for(const y of roads)ctx.fillRect(0,y-38,world.w,76);
+ ctx.strokeStyle='#e7c66b';ctx.lineWidth=3;ctx.setLineDash([24,20]);
+ for(const x of roads){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,world.h);ctx.stroke()}
+ for(const y of roads){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(world.w,y);ctx.stroke()}ctx.setLineDash([]);
+ // sidewalks
+ ctx.fillStyle='#9a9a91';for(const x of roads){ctx.fillRect(x-49,0,9,world.h);ctx.fillRect(x+40,0,9,world.h)}for(const y of roads){ctx.fillRect(0,y-49,world.w,9);ctx.fillRect(0,y+40,world.w,9)}
+ for(const b of buildings){roundRect(b.x+7,b.y+10,b.w,b.h,8,'#1a263344');roundRect(b.x,b.y,b.w,b.h,7,b.c);ctx.fillStyle='#263b4a';for(let wx=12;wx<b.w-8;wx+=24)for(let wy=12;wy<b.h-8;wy+=25)ctx.fillRect(b.x+wx,b.y+wy,12,10);ctx.fillStyle='#e7d1b0';ctx.fillRect(b.x,b.y-5,b.w,7)}
+ for(const p of palms){ctx.fillStyle='#61452c';ctx.beginPath();ctx.arc(p.x,p.y,5,0,7);ctx.fill();ctx.fillStyle='#176b43';ctx.beginPath();ctx.arc(p.x,p.y,13,0,7);ctx.fill();ctx.fillStyle='#258451';ctx.beginPath();ctx.arc(p.x-4,p.y-4,7,0,7);ctx.fill()}
+ // bank landmark
+ roundRect(1600,1210,170,125,12,'#202c42');ctx.fillStyle='#d6b98c';ctx.fillRect(1612,1222,146,100);ctx.fillStyle='#f4e6c8';ctx.beginPath();ctx.moveTo(1605,1225);ctx.lineTo(1685,1180);ctx.lineTo(1765,1225);ctx.fill();ctx.fillStyle='#35475c';ctx.fillRect(1628,1255,24,55);ctx.fillRect(1673,1255,24,55);ctx.fillRect(1718,1255,24,55);ctx.fillStyle='white';ctx.font='bold 14px system-ui';ctx.fillText('COASTLINE BANK',1620,1245);
+ // mission chip and beacon
+ if(!chipTaken){const pulse=1+Math.sin(performance.now()/180)*.18;ctx.strokeStyle='#55f5df';ctx.lineWidth=3;ctx.beginPath();ctx.arc(1590,1385,17*pulse,0,7);ctx.stroke();ctx.fillStyle='#a7fff0';ctx.beginPath();ctx.arc(1590,1385,7,0,7);ctx.fill()}
+ if(chipTaken){ctx.strokeStyle='#69f6a8';ctx.lineWidth=5;ctx.beginPath();ctx.arc(1470,1240,26+Math.sin(performance.now()/190)*4,0,7);ctx.stroke()}
+}
+function drawVehicle(x,y,a,color='#24b8b1'){
+ ctx.save();ctx.translate(x,y);ctx.rotate(a);roundRect(-23,-13,48,28,8,'#111b2b');roundRect(-20,-15,40,30,7,color);roundRect(-10,-11,19,22,5,'#a8d7df');ctx.fillStyle='#f8df9b';ctx.fillRect(16,-9,4,6);ctx.fillRect(16,4,4,6);ctx.fillStyle='#26313b';ctx.fillRect(-16,-17,11,4);ctx.fillRect(7,-17,11,4);ctx.fillRect(-16,13,11,4);ctx.fillRect(7,13,11,4);ctx.restore()
+}
+function drawPerson(){ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.a);ctx.fillStyle='#17263c';ctx.beginPath();ctx.arc(0,0,10,0,7);ctx.fill();ctx.fillStyle='#f1c59a';ctx.beginPath();ctx.arc(0,-2,5,0,7);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-15);ctx.stroke();ctx.restore()}
+function update(dt){
+ if(paused)return;
+ let ix=joy.x,iy=joy.y;if(keys.ArrowLeft||keys.a)ix=-1;if(keys.ArrowRight||keys.d)ix=1;if(keys.ArrowUp||keys.w)iy=-1;if(keys.ArrowDown||keys.s)iy=1;
+ if(driving){
+  const throttle=Math.max(0,-iy),brake=Math.max(0,iy);
+  car.v+=(throttle*520-brake*600)*dt;car.v*=Math.pow(.985,dt*60);car.v=Math.max(-210,Math.min(390,car.v));
+  car.a+=ix*2.2*dt*(.35+Math.min(1,Math.abs(car.v)/130));
+  car.x+=Math.sin(car.a)*car.v*dt;car.y-=Math.cos(car.a)*car.v*dt;
+  car.x=Math.max(80,Math.min(world.w-40,car.x));car.y=Math.max(40,Math.min(world.h-40,car.y));
+  player.x=car.x;player.y=car.y;player.a=car.a;speedEl.textContent=Math.round(Math.abs(car.v)*.32)+' KM/H';
+ }else{
+  const mag=Math.hypot(ix,iy);if(mag>.08){player.a=Math.atan2(ix,-iy);player.x+=ix/mag*185*dt*Math.min(1,mag);player.y+=iy/mag*185*dt*Math.min(1,mag)}
+  speedEl.textContent='ON FOOT';
+ }
+ const target=driving?car:player;cam.x+=(target.x-W/2-cam.x)*Math.min(1,dt*5);cam.y+=(target.y-H/2-cam.y)*Math.min(1,dt*5);
+ if(!chipTaken&&Math.hypot(player.x-1590,player.y-1385)<55){chipTaken=true;mission=1;missionEl.innerHTML='THE BIG SCORE<br>Chip collected! Reach the nearby green getaway marker.'}
+ if(chipTaken&&Math.hypot(player.x-1470,player.y-1240)<90){mission=2;missionEl.innerHTML='MISSION COMPLETE<br>+$5,000 · Coastline legend!'}
+}
+function render(){
+ ctx.clearRect(0,0,W,H);ctx.save();ctx.translate(-cam.x,-cam.y);
+ worldDraw();
+ if(driving)drawVehicle(car.x,car.y,car.a);else{drawVehicle(1100,950,0);drawPerson()}
+ // traffic
+ for(let i=0;i<9;i++){const x=200+i*235,y=(performance.now()*.045+i*210)%world.h;drawVehicle(x,y,Math.PI/2,i%2?'#d7a45e':'#d75f66')}
+ ctx.restore();
+}
+function loop(t){const dt=Math.min(.04,(t-last)/1000||0);last=t;update(dt);render();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+function action(){if(!driving){if(Math.hypot(player.x-1100,player.y-950)<125){driving=true;car.x=1100;car.y=950;car.a=0;hintEl.textContent='Steer with the stick · Up to accelerate · Down to brake'}else{hintEl.textContent='Move closer to the parked car to drive';setTimeout(()=>hintEl.textContent='Move with the stick · Tap DRIVE to enter a car',1700)}}else{driving=false;player.x+=38;car.v=0;hintEl.textContent='On foot · Tap DRIVE near a car to get back in'}}
+document.getElementById('drive').addEventListener('pointerdown',e=>{e.preventDefault();action()});
+document.getElementById('interact').addEventListener('pointerdown',e=>{e.preventDefault();if(chipTaken&&mission<2){player.x=1470;player.y=1240}else if(!chipTaken){player.x=1590;player.y=1385}});
+const overlay=document.getElementById('overlay');document.getElementById('pause').onclick=()=>{paused=!paused;overlay.classList.toggle('show',paused)};document.getElementById('resume').onclick=()=>{paused=false;overlay.classList.remove('show')};
+const stick=document.getElementById('stick'),knob=document.getElementById('knob');let pointer=null;
+function setJoy(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=42,len=Math.hypot(dx,dy),s=Math.min(1,max/(len||1));joy.x=dx*s/max;joy.y=dy*s/max;knob.style.transform='translate('+dx*s+'px,'+dy*s+'px)'}
+stick.addEventListener('pointerdown',e=>{pointer=e.pointerId;stick.setPointerCapture(pointer);setJoy(e)});stick.addEventListener('pointermove',e=>{if(e.pointerId===pointer)setJoy(e)});function release(e){if(e.pointerId===pointer){pointer=null;joy.x=joy.y=0;knob.style.transform='translate(0,0)'}}stick.addEventListener('pointerup',release);stick.addEventListener('pointercancel',release);
+addEventListener('keydown',e=>{keys[e.key]=true;if(e.key.toLowerCase()==='e')action();if(e.key==='Escape'){paused=!paused;overlay.classList.toggle('show',paused)}});addEventListener('keyup',e=>keys[e.key]=false);
+})();
+</script>
+</body>
+</html>
