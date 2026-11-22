@@ -1,0 +1,92 @@
+name: Build Coastline Quest APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Coastline/**'
+      - '.github/workflows/build-quest.yml'
+
+jobs:
+  export-quest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Godot 4.4.1 and export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: true
+
+      - name: Download game character and vehicle assets
+        run: |
+          mkdir -p Coastline/assets/people Coastline/assets/vehicles
+          curl -fL https://models.vinish.dev/people/casual-man.glb -o Coastline/assets/people/casual-man.glb
+          curl -fL https://models.vinish.dev/people/casual-woman.glb -o Coastline/assets/people/casual-woman.glb
+          curl -fL https://models.vinish.dev/people/business-man.glb -o Coastline/assets/people/business-man.glb
+          curl -fL https://models.vinish.dev/people/business-woman.glb -o Coastline/assets/people/business-woman.glb
+          curl -fL https://models.vinish.dev/people/construction-worker.glb -o Coastline/assets/people/construction-worker.glb
+          curl -fL https://models.vinish.dev/people/doctor.glb -o Coastline/assets/people/doctor.glb
+          curl -fL https://models.vinish.dev/people/runner-woman.glb -o Coastline/assets/people/runner.glb
+          curl -fL https://grab3d.com/dl/sports-car/sports-car.glb -o Coastline/assets/vehicles/sports-car.glb
+          curl -fL "https://files.innerscene.com/library/police-officer-standing-3d-person-emergency-services-9fd93114/5a54c44f2bfc5920ccd2/professional-police-officer.glb" -o Coastline/assets/people/police-officer.glb
+          curl -fL "https://shuriken.studio/models/download/6fb5a1fb-25d8-4fdc-9e4b-a605a39f884c" -o Coastline/assets/vehicles/police-helicopter.glb
+          cp Coastline/assets/vehicles/sports-car.glb Coastline/assets/vehicles/police-car.glb
+          test -s Coastline/assets/vehicles/sports-car.glb
+
+      - name: Configure Godot Android SDK paths
+        run: |
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          EOF
+
+      - name: Import project resources
+        run: godot --headless --editor --path Coastline --quit
+
+      - name: Run project startup smoke test
+        run: |
+          set -o pipefail
+          godot --headless --path Coastline --quit-after 8 2>&1 | tee /tmp/coastline-quest-smoke.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' /tmp/coastline-quest-smoke.log; then
+            echo "Godot script errors detected."
+            exit 1
+          fi
+
+      - name: Export Meta Quest Android APK
+        run: |
+          mkdir -p Coastline/build
+          godot --headless --path Coastline --export-debug "Android" "$GITHUB_WORKSPACE/Coastline/build/Coastline-Quest.apk"
+
+      - name: Verify APK
+        run: |
+          test -s Coastline/build/Coastline-Quest.apk
+          file Coastline/build/Coastline-Quest.apk
+          unzip -t Coastline/build/Coastline-Quest.apk | tail -n 2
+
+      - name: Upload Quest APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Coastline-Quest-APK
+          path: Coastline/build/Coastline-Quest.apk
+          if-no-files-found: error
