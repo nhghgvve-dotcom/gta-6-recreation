@@ -559,16 +559,6 @@ func _create_car() -> void:
 			push_warning("Sedan wheel nodes were not all found; wheel animation may be incomplete.")
 	else:
 		push_error("Could not load detailed sedan model.")
-	# Keep the car's interaction footprint aligned to its visible body.
-	var collision := StaticBody3D.new()
-	collision.name = "VehicleCollision"
-	car.add_child(collision)
-	var collision_shape := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(2.1, 1.35, 4.9)
-	collision_shape.shape = shape
-	collision_shape.position.y = 0.72
-	collision.add_child(collision_shape)
 
 func _animate_car_wheels(delta: float) -> void:
 	if abs(car_velocity) < 0.01:
@@ -984,7 +974,7 @@ func _drive_car(delta: float) -> void:
 	car.position += -car.global_transform.basis.z * car_velocity * delta
 	car.position.x = clamp(car.position.x, -238, 238)
 	car.position.z = clamp(car.position.z, -238, 238)
-	car.position.y = 0.65
+	car.position.y = -0.2
 	_check_car_pedestrian_collisions()
 	if Input.is_key_pressed(KEY_SPACE):
 		car_velocity = move_toward(car_velocity, 0, 28 * delta)
