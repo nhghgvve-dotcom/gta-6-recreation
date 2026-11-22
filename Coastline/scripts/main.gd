@@ -30,6 +30,10 @@ var car_yaw := 0.0
 var mouse_captured := true
 var is_paused := false
 var pause_layer: CanvasLayer
+var pause_buttons: Array[Button] = []
+var pause_selected_index := 0
+var pause_stick_y := 0.0
+var pause_stick_repeat := 0.0
 var hud: Label
 var help_label: Label
 var speed_label: Label
@@ -241,6 +245,14 @@ func _setup_controller_inputs() -> void:
 	_add_joy_button("sprint", JOY_BUTTON_LEFT_STICK)
 	_add_joy_button("interact", JOY_BUTTON_Y)
 	_add_joy_button("pause", JOY_BUTTON_START)
+	_add_joy_button("ui_up", JOY_BUTTON_DPAD_UP)
+	_add_joy_button("ui_down", JOY_BUTTON_DPAD_DOWN)
+	_add_joy_button("ui_left", JOY_BUTTON_DPAD_LEFT)
+	_add_joy_button("ui_right", JOY_BUTTON_DPAD_RIGHT)
+	_add_joy_button("ui_accept", JOY_BUTTON_A)
+	_add_joy_button("ui_cancel", JOY_BUTTON_B)
+	_add_joy_axis("ui_up", JOY_AXIS_LEFT_Y, -1.0)
+	_add_joy_axis("ui_down", JOY_AXIS_LEFT_Y, 1.0)
 	_add_joy_button("weapon_wheel", JOY_BUTTON_LEFT_SHOULDER)
 	_add_joy_button("weapon_prev", JOY_BUTTON_DPAD_LEFT)
 	_add_joy_button("weapon_next", JOY_BUTTON_DPAD_RIGHT)
@@ -1277,92 +1289,220 @@ func _create_pause_menu() -> void:
 	pause_layer.layer = 20
 	add_child(pause_layer)
 
-	var dim := ColorRect.new()
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0.015, 0.025, 0.045, 0.78)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	pause_layer.add_child(dim)
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.015, 0.025, 0.045, 0.94)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	pause_layer.add_child(backdrop)
 
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.add_child(center)
+	var layout := HBoxContainer.new()
+	layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layout.add_theme_constant_override("separation", 0)
+	backdrop.add_child(layout)
 
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(390, 0)
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.055, 0.075, 0.11, 0.97)
-	panel_style.border_color = Color(0.25, 0.68, 0.82, 0.9)
-	panel_style.set_border_width_all(1)
-	panel_style.set_corner_radius_all(18)
-	panel_style.content_margin_left = 34
-	panel_style.content_margin_right = 34
-	panel_style.content_margin_top = 30
-	panel_style.content_margin_bottom = 28
-	panel.add_theme_stylebox_override("panel", panel_style)
-	center.add_child(panel)
+	# Left-side city map panel, evoking the classic open-world pause screen.
+	var map_panel := PanelContainer.new()
+	map_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_panel.size_flags_stretch_ratio = 1.45
+	var map_style := StyleBoxFlat.new()
+	map_style.bg_color = Color(0.055, 0.075, 0.085, 1.0)
+	map_style.border_color = Color(0.28, 0.75, 0.72, 0.75)
+	map_style.border_width_right = 2
+	map_panel.add_theme_stylebox_override("panel", map_style)
+	layout.add_child(map_panel)
 
-	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 13)
-	panel.add_child(stack)
+	var map_stack := VBoxContainer.new()
+	map_stack.add_theme_constant_override("separation", 12)
+	map_stack.add_theme_constant_override("margin_left", 34)
+	map_stack.add_theme_constant_override("margin_right", 30)
+	map_stack.add_theme_constant_override("margin_top", 30)
+	map_stack.add_theme_constant_override("margin_bottom", 28)
+	map_panel.add_child(map_stack)
 
-	var heading := Label.new()
-	heading.text = "PAUSED"
-	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	heading.add_theme_font_size_override("font_size", 34)
-	heading.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0))
-	stack.add_child(heading)
+	var brand := Label.new()
+	brand.text = "COASTLINE"
+	brand.add_theme_font_size_override("font_size", 36)
+	brand.add_theme_color_override("font_color", Color(0.95, 0.97, 0.91))
+	brand.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	brand.add_theme_constant_override("shadow_offset_x", 2)
+	brand.add_theme_constant_override("shadow_offset_y", 2)
+	map_stack.add_child(brand)
 
-	var subtitle := Label.new()
-	subtitle.text = "Take a break. The island can wait."
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 14)
-	subtitle.add_theme_color_override("font_color", Color(0.62, 0.72, 0.82))
-	stack.add_child(subtitle)
+	var map_caption := Label.new()
+	map_caption.text = "CITY MAP  /  ISLAND DISTRICT"
+	map_caption.add_theme_font_size_override("font_size", 13)
+	map_caption.add_theme_color_override("font_color", Color(0.37, 0.83, 0.78))
+	map_stack.add_child(map_caption)
 
+	var map_area := Control.new()
+	map_area.custom_minimum_size = Vector2(0, 300)
+	map_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	map_area.clip_contents = true
+	map_stack.add_child(map_area)
+	var map_bg := ColorRect.new()
+	map_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	map_bg.color = Color(0.12, 0.18, 0.17)
+	map_area.add_child(map_bg)
+	# Stylized road grid and coastline shapes.
+	for x in [0.18, 0.38, 0.59, 0.79]:
+		var road := ColorRect.new()
+		road.anchor_left = x
+		road.anchor_right = x + 0.025
+		road.anchor_top = 0.0
+		road.anchor_bottom = 1.0
+		road.color = Color(0.35, 0.39, 0.34)
+		map_area.add_child(road)
+	for y in [0.2, 0.43, 0.66, 0.86]:
+		var road := ColorRect.new()
+		road.anchor_top = y
+		road.anchor_bottom = y + 0.025
+		road.anchor_left = 0.0
+		road.anchor_right = 1.0
+		road.color = Color(0.35, 0.39, 0.34)
+		map_area.add_child(road)
+	var coast := ColorRect.new()
+	coast.anchor_left = 0.0
+	coast.anchor_right = 0.12
+	coast.anchor_top = 0.0
+	coast.anchor_bottom = 1.0
+	coast.color = Color(0.035, 0.30, 0.40, 0.9)
+	map_area.add_child(coast)
+	var map_pin := Label.new()
+	map_pin.text = "◆"
+	map_pin.position = Vector2(210, 118)
+	map_pin.add_theme_font_size_override("font_size", 27)
+	map_pin.add_theme_color_override("font_color", Color(0.2, 0.95, 0.86))
+	map_area.add_child(map_pin)
+
+	var location := Label.new()
+	location.text = "VICE COAST  •  SUNSET DISTRICT\nExplore the island, find missions, and make your mark."
+	location.add_theme_font_size_override("font_size", 14)
+	location.add_theme_color_override("font_color", Color(0.72, 0.79, 0.75))
+	location.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	map_stack.add_child(location)
+
+	var menu_panel := PanelContainer.new()
+	menu_panel.custom_minimum_size = Vector2(360, 0)
+	menu_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var menu_style := StyleBoxFlat.new()
+	menu_style.bg_color = Color(0.035, 0.045, 0.06, 1.0)
+	menu_style.content_margin_left = 30
+	menu_style.content_margin_right = 30
+	menu_style.content_margin_top = 34
+	menu_style.content_margin_bottom = 28
+	menu_panel.add_theme_stylebox_override("panel", menu_style)
+	layout.add_child(menu_panel)
+
+	var menu_stack := VBoxContainer.new()
+	menu_stack.add_theme_constant_override("separation", 9)
+	menu_panel.add_child(menu_stack)
+
+	var menu_heading := Label.new()
+	menu_heading.text = "PAUSE MENU"
+	menu_heading.add_theme_font_size_override("font_size", 25)
+	menu_heading.add_theme_color_override("font_color", Color(0.95, 0.97, 0.91))
+	menu_stack.add_child(menu_heading)
+	var menu_subtitle := Label.new()
+	menu_subtitle.text = "Take a moment."
+	menu_subtitle.add_theme_font_size_override("font_size", 13)
+	menu_subtitle.add_theme_color_override("font_color", Color(0.53, 0.62, 0.62))
+	menu_stack.add_child(menu_subtitle)
 	var spacer := Control.new()
-	spacer.custom_minimum_size.y = 8
-	stack.add_child(spacer)
+	spacer.custom_minimum_size.y = 20
+	menu_stack.add_child(spacer)
 
+	pause_buttons.clear()
 	var resume_button := _make_pause_button("RESUME")
 	resume_button.pressed.connect(_resume_game)
-	stack.add_child(resume_button)
+	menu_stack.add_child(resume_button)
+	pause_buttons.append(resume_button)
+
+	var map_button := _make_pause_button("MAP")
+	map_button.pressed.connect(_focus_pause_button.bind(0))
+	menu_stack.add_child(map_button)
+	pause_buttons.append(map_button)
+
+	var settings_button := _make_pause_button("SETTINGS")
+	settings_button.pressed.connect(_show_pause_notice.bind("Settings are coming in a future update."))
+	menu_stack.add_child(settings_button)
+	pause_buttons.append(settings_button)
 
 	var restart_button := _make_pause_button("RESTART")
 	restart_button.pressed.connect(_restart_game)
-	stack.add_child(restart_button)
+	menu_stack.add_child(restart_button)
+	pause_buttons.append(restart_button)
 
 	var quit_button := _make_pause_button("QUIT GAME")
 	quit_button.pressed.connect(_quit_game)
-	stack.add_child(quit_button)
+	menu_stack.add_child(quit_button)
+	pause_buttons.append(quit_button)
 
-	var hint := Label.new()
-	hint.text = "Press ESC to resume"
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 12)
-	hint.add_theme_color_override("font_color", Color(0.48, 0.59, 0.7))
-	stack.add_child(hint)
+	var footer_spacer := Control.new()
+	footer_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	menu_stack.add_child(footer_spacer)
+	var controls := Label.new()
+	controls.text = "D-PAD / LEFT STICK  SELECT\nA  CONFIRM     B / START  BACK"
+	controls.add_theme_font_size_override("font_size", 12)
+	controls.add_theme_color_override("font_color", Color(0.46, 0.58, 0.58))
+	menu_stack.add_child(controls)
 	pause_layer.visible = false
 
 func _make_pause_button(caption: String) -> Button:
 	var button := Button.new()
-	button.text = caption
-	button.custom_minimum_size = Vector2(0, 48)
-	button.add_theme_font_size_override("font_size", 16)
-	button.add_theme_color_override("font_color", Color(0.92, 0.97, 1.0))
+	button.text = "   " + caption
+	button.custom_minimum_size = Vector2(0, 52)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.focus_mode = Control.FOCUS_ALL
+	button.add_theme_font_size_override("font_size", 17)
+	button.add_theme_color_override("font_color", Color(0.82, 0.86, 0.81))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 0.96))
+	button.add_theme_color_override("font_focus_color", Color(1.0, 1.0, 0.96))
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.10, 0.16, 0.23)
-	normal.border_color = Color(0.20, 0.38, 0.49)
-	normal.set_border_width_all(1)
-	normal.set_corner_radius_all(9)
+	normal.bg_color = Color(0.07, 0.09, 0.10, 0.4)
+	normal.content_margin_left = 12
+	normal.set_border_width_all(0)
 	var hover := StyleBoxFlat.new()
-	hover.bg_color = Color(0.12, 0.31, 0.39)
-	hover.border_color = Color(0.35, 0.78, 0.88)
-	hover.set_border_width_all(1)
-	hover.set_corner_radius_all(9)
+	hover.bg_color = Color(0.11, 0.19, 0.18, 1.0)
+	hover.border_color = Color(0.28, 0.85, 0.76, 1.0)
+	hover.border_width_left = 4
+	hover.content_margin_left = 12
+	var focus := hover.duplicate() as StyleBoxFlat
+	focus.bg_color = Color(0.13, 0.24, 0.22, 1.0)
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_stylebox_override("focus", focus)
+	button.add_theme_stylebox_override("pressed", focus)
 	return button
+
+func _focus_pause_button(index: int) -> void:
+	if index >= 0 and index < pause_buttons.size():
+		pause_selected_index = index
+		pause_buttons[index].grab_focus()
+
+func _show_pause_notice(message: String) -> void:
+	if pause_buttons.size() > 0:
+		pause_buttons[0].text = "   " + message.to_upper()
+		pause_buttons[0].grab_focus()
+
+func _pause_menu_move(direction: int) -> void:
+	if pause_buttons.is_empty():
+		return
+	pause_selected_index = posmod(pause_selected_index + direction, pause_buttons.size())
+	pause_buttons[pause_selected_index].grab_focus()
+
+func _handle_pause_navigation(event: InputEvent) -> bool:
+	if not is_paused:
+		return false
+	if event.is_action_pressed("ui_down") or event.is_action_pressed("ui_right"):
+		_pause_menu_move(1)
+		return true
+	if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left"):
+		_pause_menu_move(-1)
+		return true
+	if event.is_action_pressed("ui_cancel"):
+		_resume_game()
+		return true
+	return false
 
 func _set_paused(value: bool) -> void:
 	is_paused = value
@@ -1371,7 +1511,8 @@ func _set_paused(value: bool) -> void:
 	mouse_captured = not value
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if value else Input.MOUSE_MODE_CAPTURED
 	if value:
-		pause_layer.get_child(0).get_child(0).get_child(0).get_child(3).grab_focus()
+		pause_selected_index = 0
+		_focus_pause_button(pause_selected_index)
 
 func _resume_game() -> void:
 	_set_paused(false)
@@ -1422,6 +1563,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if is_paused:
+		if _handle_pause_navigation(event):
+			get_viewport().set_input_as_handled()
 		return
 	if weapon_menu_open and event.is_action_pressed("weapon_next"):
 		_select_weapon("ARC" if selected_weapon == "PULSE" else "PULSE" if selected_weapon == "FISTS" else "FISTS")
