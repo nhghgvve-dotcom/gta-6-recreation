@@ -702,19 +702,19 @@ func _update_hud() -> void:
 		speed_label.text = "ON FOOT"
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("weapon_wheel"):
-		if event.pressed and not event.echo and not is_paused:
-			weapon_menu_open = true
-			weapon_menu_layer.visible = true
-			mouse_captured = false
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-			get_viewport().set_input_as_handled()
-		elif event.is_action_released("weapon_wheel") and weapon_menu_open:
-			weapon_menu_open = false
-			weapon_menu_layer.visible = false
-			mouse_captured = true
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-			get_viewport().set_input_as_handled()
+	if event.is_action_pressed("weapon_wheel") and not is_paused:
+		weapon_menu_open = true
+		weapon_menu_layer.visible = true
+		mouse_captured = false
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_released("weapon_wheel") and weapon_menu_open:
+		weapon_menu_open = false
+		weapon_menu_layer.visible = false
+		mouse_captured = true
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("pause"):
 		_set_paused(not is_paused)
