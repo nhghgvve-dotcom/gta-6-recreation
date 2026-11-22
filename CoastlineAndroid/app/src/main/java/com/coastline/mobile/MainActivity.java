@@ -58,8 +58,16 @@ public class MainActivity extends Activity {
         webView.loadUrl("file:///android_asset/mobile.html");
     }
 
+    private void hideCustomView() {
+        if (customView == null) return;
+        root.removeView(customView); customView = null;
+        webView.setVisibility(View.VISIBLE);
+        if (customViewCallback != null) customViewCallback.onCustomViewHidden();
+        customViewCallback = null; immersive();
+    }
+
     @Override public void onBackPressed() {
-        if (customView != null) { webView.getWebChromeClient().onHideCustomView(); return; }
+        if (customView != null) { hideCustomView(); return; }
         webView.evaluateJavascript("document.getElementById('pause').click()", null);
     }
 
