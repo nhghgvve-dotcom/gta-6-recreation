@@ -60,6 +60,7 @@ var footstep_timer := 0.0
 var wanted_level := 0
 var police_officer_scene: PackedScene
 var police_helicopter_scene: PackedScene
+var police_car_scene: PackedScene
 var police_units: Array[Node3D] = []
 var police_helicopter: Node3D
 var police_rotors: Array[Node3D] = []
@@ -629,10 +630,13 @@ func _create_npcs() -> void:
 func _load_police_assets() -> void:
 	police_officer_scene = load("res://assets/people/police-officer.glb") as PackedScene
 	police_helicopter_scene = load("res://assets/vehicles/police-helicopter.glb") as PackedScene
+	police_car_scene = load("res://assets/vehicles/police-car.glb") as PackedScene
 	if police_officer_scene == null:
 		push_warning("Police officer model could not be loaded.")
 	if police_helicopter_scene == null:
 		push_warning("Police helicopter model could not be loaded.")
+	if police_car_scene == null:
+		push_warning("Police patrol car model could not be loaded.")
 
 func _raise_wanted_level() -> void:
 	# Vehicle takeovers are the non-violent arcade event that raises wanted stars.
@@ -640,19 +644,29 @@ func _raise_wanted_level() -> void:
 	_update_hud()
 
 func _spawn_police_unit(index: int, target: Vector3) -> void:
-	if police_officer_scene == null:
+	if police_car_scene == null:
 		return
-	var officer := Node3D.new()
-	officer.name = "PoliceOfficer_%02d" % index
-	var model := police_officer_scene.instantiate() as Node3D
+	var patrol_car := Node3D.new()
+	patrol_car.name = "PolicePatrolCar_%02d" % index
+	var model := police_car_scene.instantiate() as Node3D
 	if model == null:
-		officer.queue_free()
+		patrol_car.queue_free()
 		return
-	officer.add_child(model)
+	model.name = "PoliceCarModel"
+	# The patrol-car GLB faces +Z; the chase root faces -Z toward its target.
+	model.rotation.y = PI
+	patrol_car.add_child(model)
+	if police_officer_scene != null:
+		var driver := police_officer_scene.instantiate() as Node3D
+		if driver != null:
+			driver.name = "PoliceDriver"
+			driver.scale = Vector3.ONE * 0.42
+			driver.position = Vector3(-0.38, 0.72, 0.12)
+			model.add_child(driver)
 	var angle := TAU * float(index) / 6.0
-	officer.global_position = target + Vector3(cos(angle) * 30.0, 0.0, sin(angle) * 30.0)
-	add_child(officer)
-	police_units.append(officer)
+	patrol_car.global_position = target + Vector3(cos(angle) * 34.0, 0.0, sin(angle) * 34.0)
+	add_child(patrol_car)
+	police_units.append(patrol_car)
 
 func _collect_police_rotors(node: Node) -> void:
 	if node is Node3D and String(node.name).to_lower().contains("rotor"):
@@ -673,12 +687,12 @@ func _update_police_response(delta: float) -> void:
 		var officer := police_units[i]
 		if not is_instance_valid(officer):
 			continue
-		var destination := target + Vector3(float(i - 1) * 2.4, 0.0, float(i % 2) * 2.0)
+		var destination := target + Vector3(float(i - 1) * 7.0, 0.0, float(i % 2) * 8.0)
 		var offset := destination - officer.global_position
 		offset.y = 0.0
-		if offset.length() > 3.2:
-			officer.global_position += offset.normalized() * 4.2 * delta
-		if officer.global_position.distance_to(target) > 0.25:
+		if offset.length() > 8.0:
+			officer.global_position += offset.normalized() * 15.0 * delta
+		if offset.length() > 0.25:
 			officer.look_at(Vector3(target.x, officer.global_position.y, target.z), Vector3.UP)
 
 	if wanted_level > 3 and police_helicopter == null and police_helicopter_scene != null:
