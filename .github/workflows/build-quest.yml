@@ -75,7 +75,7 @@ jobs:
       - name: Export Meta Quest Android APK
         run: |
           mkdir -p Coastline/build
-          godot --headless --path Coastline --install-android-build-template --export-debug "Android" "$GITHUB_WORKSPACE/Coastline/build/Coastline-Quest.apk"
+          godot --verbose --headless --path Coastline --install-android-build-template --export-debug "Android" "$GITHUB_WORKSPACE/Coastline/build/Coastline-Quest.apk"
 
       - name: Verify APK
         run: |
