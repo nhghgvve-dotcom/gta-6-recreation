@@ -32,6 +32,12 @@ jobs:
           curl -fL https://models.vinish.dev/people/doctor.glb -o Coastline/assets/people/doctor.glb
           curl -fL https://models.vinish.dev/people/runner-woman.glb -o Coastline/assets/people/runner.glb
 
+      - name: Download detailed CC0 sedan model
+        run: |
+          mkdir -p Coastline/assets/vehicles
+          curl -fL https://tevy.dev/models/family-sedan/v1/lod1.glb -o Coastline/assets/vehicles/family-sedan.glb
+          test -s Coastline/assets/vehicles/family-sedan.glb
+
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
 
