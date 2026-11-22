@@ -60,6 +60,24 @@ jobs:
           export/android/java_sdk_path = "$JAVA_HOME"
           EOF
 
+      - name: Disable OpenXR for the Android tablet build
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          project = Path("Coastline/project.godot")
+          data = project.read_text()
+          old = "[xr]\\nopenxr/enabled=true"
+          if old not in data:
+              raise SystemExit("Expected OpenXR project setting was not found; refusing an uncertain tablet export.")
+          project.write_text(data.replace(old, "[xr]\\nopenxr/enabled=false", 1))
+          preset = Path("Coastline/export_presets.cfg").read_text()
+          mobile = preset.split('[preset.2.options]', 1)[1]
+          assert 'xr_features/xr_mode=0' in mobile
+          assert 'plugins/GodotOpenXRMeta=false' in mobile
+          assert 'plugins/GodotOpenXRKHR=false' in mobile
+          print("Verified: Android tablet export has OpenXR disabled and both OpenXR plugins off.")
+          PY
+
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
 
