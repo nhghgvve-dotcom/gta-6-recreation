@@ -64,17 +64,19 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           project = Path("Coastline/project.godot")
           data = project.read_text()
-          old = "[xr]\\nopenxr/enabled=true"
-          if old not in data:
-              raise SystemExit("Expected OpenXR project setting was not found; refusing an uncertain tablet export.")
-          project.write_text(data.replace(old, "[xr]\\nopenxr/enabled=false", 1))
+          updated, count = re.subn(r'(?m)^openxr/enabled=true$', 'openxr/enabled=false', data, count=1)
+          if count != 1 or '[xr]' not in data:
+              raise SystemExit("Could not safely disable the OpenXR project setting.")
+          project.write_text(updated)
           preset = Path("Coastline/export_presets.cfg").read_text()
           mobile = preset.split('[preset.2.options]', 1)[1]
           assert 'xr_features/xr_mode=0' in mobile
           assert 'plugins/GodotOpenXRMeta=false' in mobile
           assert 'plugins/GodotOpenXRKHR=false' in mobile
+          assert 'openxr/enabled=false' in project.read_text()
           print("Verified: Android tablet export has OpenXR disabled and both OpenXR plugins off.")
           PY
 
