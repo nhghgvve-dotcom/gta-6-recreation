@@ -945,7 +945,7 @@ func _create_vehicle_interior(vehicle_model: Node3D) -> void:
 	_add_cabin_box(cabin, "CenterConsole", Vector3(0.28, 0.18, 0.72), Vector3(0.0, 0.53, -0.05), trim_mat)
 	_add_cabin_box(cabin, "InfotainmentScreen", Vector3(0.34, 0.22, 0.035), Vector3(0.0, 0.93, -0.49), screen_mat)
 	for side in [-1.0, 1.0]:
-		var seat_x := side * 0.43
+		var seat_x: float = float(side) * 0.43
 		_add_cabin_box(cabin, "SeatCushion", Vector3(0.58, 0.18, 0.58), Vector3(seat_x, 0.48, 0.24), seat_mat)
 		var backrest := _add_cabin_box(cabin, "SeatBackrest", Vector3(0.58, 0.78, 0.18), Vector3(seat_x, 0.88, 0.48), seat_mat)
 		backrest.rotation.x = -0.10
