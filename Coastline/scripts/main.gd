@@ -544,15 +544,17 @@ func _create_car() -> void:
 	# Put the car directly ahead of the player and align its tyres with the road.
 	car.position = Vector3(-8, -0.01, -8)
 	add_child(car)
-	var sedan_scene := load("res://assets/vehicles/compact-car.glb") as PackedScene
+	var sedan_scene := load("res://assets/vehicles/sports-car.glb") as PackedScene
 	if sedan_scene == null:
-		push_error("Could not load compact car model: res://assets/vehicles/compact-car.glb")
+		push_error("Could not load sports car model: res://assets/vehicles/sports-car.glb")
 		return
 	car_model = sedan_scene.instantiate() as Node3D
 	if car_model == null:
-		push_error("Compact car scene did not contain a Node3D root.")
+		push_error("Sports car scene did not contain a Node3D root.")
 		return
-	car_model.name = "DetailedSedan"
+	car_model.name = "SportsCoupe"
+	# Rotate the model 180 degrees so its nose points away from the player.
+	car_model.rotation.y = PI
 	car.add_child(car_model)
 	_collect_car_wheels(car_model)
 
