@@ -1556,6 +1556,8 @@ func _create_mobile_controls(layer: CanvasLayer) -> void:
 	if OS.get_name() != "Android" and OS.get_name() != "iOS":
 		return
 	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	help_label.visible = false
+	speed_label.position = Vector2(1020, 20)
 	mobile_controls_root = Control.new()
 	mobile_controls_root.name = "MobileTouchControls"
 	mobile_controls_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1600,6 +1602,7 @@ func _create_mobile_controls(layer: CanvasLayer) -> void:
 	_add_mobile_button("RUN", "sprint", -34, -122)
 	_add_mobile_button("PAUSE", "pause", -156, -122, true)
 	_add_mobile_button("BRAKE", "vehicle_brake", -34, -200)
+	_add_mobile_button("FIRE", "fire", -156, -200)
 
 func _add_mobile_button(caption: String, action: String, right_offset: float, bottom_offset: float, instant := false) -> void:
 	var button := Button.new()
