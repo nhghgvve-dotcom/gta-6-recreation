@@ -30,6 +30,8 @@ var car_yaw := 0.0
 var mouse_captured := true
 var is_paused := false
 var pause_layer: CanvasLayer
+var settings_panel: PanelContainer
+var fullscreen_button: Button
 var pause_buttons: Array[Button] = []
 var pause_selected_index := 0
 var pause_stick_y := 0.0
@@ -547,8 +549,7 @@ func _update_vr_hands() -> void:
 		vr_right_hand_model.visible = not right_optical
 
 func _instantiate_person(model_name: String) -> Node3D:
-	var path := "res://assets/people/" + model_name + ".glb"
-	var packed := load(path) as PackedScene
+	var path := "res://assets/people/" + model_name + ".glb"	var packed := load(path) as PackedScene
 	if packed == null:
 		push_warning("Missing person model: " + path)
 		return null
@@ -1097,7 +1098,6 @@ func _collect_car_wheels(node: Node) -> void:
 			if part_name.contains("wheel") or part_name.contains("tire") or part_name.contains("tyre"):
 				car_wheels.append(child as Node3D)
 		_collect_car_wheels(child)
-
 func _animate_car_wheels(delta: float) -> void:
 	if abs(car_velocity) < 0.01:
 		return
@@ -1431,7 +1431,7 @@ func _create_pause_menu() -> void:
 	pause_buttons.append(map_button)
 
 	var settings_button := _make_pause_button("SETTINGS")
-	settings_button.pressed.connect(_show_pause_notice.bind("Settings are coming in a future update."))
+	settings_button.pressed.connect(_open_settings)
 	menu_stack.add_child(settings_button)
 	pause_buttons.append(settings_button)
 
@@ -1454,6 +1454,67 @@ func _create_pause_menu() -> void:
 	controls.add_theme_color_override("font_color", Color(0.46, 0.58, 0.58))
 	menu_stack.add_child(controls)
 	pause_layer.visible = false
+	_create_settings_panel()
+
+func _create_settings_panel() -> void:
+	settings_panel = PanelContainer.new()
+	settings_panel.name = "SettingsPanel"
+	settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+	settings_panel.offset_left = -250
+	settings_panel.offset_top = -170
+	settings_panel.offset_right = 250
+	settings_panel.offset_bottom = 170
+	settings_panel.visible = false
+	settings_panel.z_index = 5
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.035, 0.055, 0.07, 0.98)
+	panel_style.border_color = Color(0.28, 0.75, 0.72, 0.95)
+	panel_style.set_border_width_all(2)
+	panel_style.set_corner_radius_all(12)
+	panel_style.content_margin_left = 28
+	panel_style.content_margin_right = 28
+	panel_style.content_margin_top = 24
+	panel_style.content_margin_bottom = 24
+	settings_panel.add_theme_stylebox_override("panel", panel_style)
+	pause_layer.add_child(settings_panel)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 14)
+	settings_panel.add_child(stack)
+	var heading := Label.new()
+	heading.text = "SETTINGS"
+	heading.add_theme_font_size_override("font_size", 26)
+	heading.add_theme_color_override("font_color", Color(0.95, 0.97, 0.91))
+	stack.add_child(heading)
+	var display_label := Label.new()
+	display_label.text = "DISPLAY"
+	display_label.add_theme_font_size_override("font_size", 13)
+	display_label.add_theme_color_override("font_color", Color(0.37, 0.83, 0.78))
+	stack.add_child(display_label)
+	fullscreen_button = _make_pause_button("FULL SCREEN: " + _fullscreen_status())
+	fullscreen_button.pressed.connect(_toggle_fullscreen)
+	stack.add_child(fullscreen_button)
+	var back_button := _make_pause_button("BACK")
+	back_button.pressed.connect(_close_settings)
+	stack.add_child(back_button)
+
+func _fullscreen_status() -> String:
+	return "ON" if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN else "OFF"
+
+func _toggle_fullscreen() -> void:
+	var currently_fullscreen := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if currently_fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
+	if fullscreen_button:
+		fullscreen_button.text = "   FULL SCREEN: " + _fullscreen_status()
+		fullscreen_button.grab_focus()
+
+func _open_settings() -> void:
+	settings_panel.visible = true
+	fullscreen_button.text = "   FULL SCREEN: " + _fullscreen_status()
+	fullscreen_button.grab_focus()
+
+func _close_settings() -> void:
+	settings_panel.visible = false
+	_focus_pause_button(2)
 
 func _make_pause_button(caption: String) -> Button:
 	var button := Button.new()
@@ -1507,6 +1568,11 @@ func _handle_pause_navigation(event: InputEvent) -> bool:
 	if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left"):
 		_pause_menu_move(-1)
 		return true
+	if settings_panel != null and settings_panel.visible:
+		if event.is_action_pressed("ui_cancel"):
+			_close_settings()
+			return true
+		return false
 	if event.is_action_pressed("ui_cancel"):
 		_resume_game()
 		return true
@@ -1647,8 +1713,7 @@ func _mobile_interact() -> void:
 
 func _set_mobile_joystick(point: Vector2) -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
-	mobile_joystick_center = Vector2(110.0, viewport_size.y - 110.0)
-	var offset := point - mobile_joystick_center
+	mobile_joystick_center = Vector2(110.0, viewport_size.y - 110.0)	var offset := point - mobile_joystick_center
 	if offset.length() > mobile_joystick_radius:
 		offset = offset.normalized() * mobile_joystick_radius
 	var stick := offset / mobile_joystick_radius
