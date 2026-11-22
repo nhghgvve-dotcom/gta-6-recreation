@@ -541,31 +541,33 @@ func _create_npcs() -> void:
 func _create_car() -> void:
 	car = Node3D.new()
 	car.name = "PlayerCar"
-	# The imported sedan is authored at real-world scale with its tyres at y=0.
-	# The terrain top is y=-0.2, so this places the tyres directly on the road.
-	car.position = Vector3(10, -0.2, 4)
+	# Put the car directly ahead of the player and align its tyres with the road.
+	car.position = Vector3(-8, -0.01, -8)
 	add_child(car)
-	car_model = load("res://assets/vehicles/family-sedan.glb").instantiate() as Node3D
-	if car_model:
-		car_model.name = "DetailedSedan"
-		# Godot vehicles face -Z; turn the source model to match the driving code.
-		car_model.rotation.y = PI
-		car.add_child(car_model)
-		for wheel_name in ["wheel_FL", "wheel_FR", "wheel_RL", "wheel_RR"]:
-			var wheel := car_model.find_child(wheel_name, true, false) as Node3D
-			if wheel:
-				car_wheels.append(wheel)
-		if car_wheels.size() != 4:
-			push_warning("Sedan wheel nodes were not all found; wheel animation may be incomplete.")
-	else:
-		push_error("Could not load detailed sedan model.")
+	var sedan_scene := load("res://assets/vehicles/compact-car.glb") as PackedScene
+	if sedan_scene == null:
+		push_error("Could not load compact car model: res://assets/vehicles/compact-car.glb")
+		return
+	car_model = sedan_scene.instantiate() as Node3D
+	if car_model == null:
+		push_error("Compact car scene did not contain a Node3D root.")
+		return
+	car_model.name = "DetailedSedan"
+	car.add_child(car_model)
+	_collect_car_wheels(car_model)
+
+func _collect_car_wheels(node: Node) -> void:
+	for child in node.get_children():
+		if child is Node3D:
+			var part_name := String(child.name).to_lower()
+			if part_name.contains("wheel") or part_name.contains("tire") or part_name.contains("tyre"):
+				car_wheels.append(child as Node3D)
+		_collect_car_wheels(child)
 
 func _animate_car_wheels(delta: float) -> void:
 	if abs(car_velocity) < 0.01:
 		return
-	# The model's wheel pivots are centered on each axle. Spin them in place
-	# using the car's travel distance and an approximate 0.33 m tyre radius.
-	var wheel_rotation := -car_velocity * delta / 0.33
+	var wheel_rotation := -car_velocity * delta / 0.32
 	for wheel in car_wheels:
 		if is_instance_valid(wheel):
 			wheel.rotate_object_local(Vector3.RIGHT, wheel_rotation)
@@ -942,7 +944,7 @@ func _spawn_impact_sparks(origin: Vector3) -> void:
 		tween.chain().tween_callback(spark.queue_free)
 
 func _trigger_impact_effect() -> void:
-	var impact_strength := clamp(abs(car_velocity) / CAR_SPEED, 0.25, 1.0)
+	var impact_strength: float = clampf(abs(car_velocity) / CAR_SPEED, 0.25, 1.0)
 	impact_shake_time = max(impact_shake_time, 0.28)
 	impact_shake_strength = max(impact_shake_strength, 0.035 + impact_strength * 0.075)
 	impact_flash_time = max(impact_flash_time, 0.32)
