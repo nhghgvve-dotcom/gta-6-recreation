@@ -32,11 +32,12 @@ jobs:
           curl -fL https://models.vinish.dev/people/doctor.glb -o Coastline/assets/people/doctor.glb
           curl -fL https://models.vinish.dev/people/runner-woman.glb -o Coastline/assets/people/runner.glb
 
-      - name: Download Godot-compatible detailed CC0 sports car model
+      - name: Download and verify detailed CC0 sports car model
         run: |
           mkdir -p Coastline/assets/vehicles
-          curl -fL https://grab3d.com/dl/compact-car/sports-car.glb -o Coastline/assets/vehicles/sports-car.glb
+          curl -fL https://grab3d.com/dl/sports-car/sports-car.glb -o Coastline/assets/vehicles/sports-car.glb
           test -s Coastline/assets/vehicles/sports-car.glb
+          file Coastline/assets/vehicles/sports-car.glb | grep -qi 'glb\|gltf\|binary'
 
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
