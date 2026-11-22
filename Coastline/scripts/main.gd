@@ -76,6 +76,10 @@ var vr_left_hand: XRController3D
 var vr_right_hand: XRController3D
 var xr_origin: XROrigin3D
 var xr_camera: XRCamera3D
+var vr_left_hand_model: Node3D
+var vr_right_hand_model: Node3D
+var tracked_left_hand: XRNode3D
+var tracked_right_hand: XRNode3D
 
 func _ready() -> void:
 	_setup_controller_inputs()
@@ -224,6 +228,8 @@ func _setup_controller_inputs() -> void:
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)
 	_add_joy_button("jump", JOY_BUTTON_A)
+	_add_key_action("vehicle_brake", KEY_SPACE)
+	_add_joy_button("vehicle_brake", JOY_BUTTON_B)
 	_add_joy_button("sprint", JOY_BUTTON_LEFT_STICK)
 	_add_joy_button("interact", JOY_BUTTON_Y)
 	_add_joy_button("pause", JOY_BUTTON_START)
@@ -438,12 +444,81 @@ func _create_player() -> void:
 		vr_left_hand.tracker = "left_hand"
 		vr_left_hand.pose = "default"
 		xr_origin.add_child(vr_left_hand)
+		vr_left_hand_model = _create_vr_hand_model(vr_left_hand, -1.0)
 		vr_right_hand = XRController3D.new()
 		vr_right_hand.name = "VRRightController"
 		vr_right_hand.tracker = "right_hand"
 		vr_right_hand.pose = "default"
 		xr_origin.add_child(vr_right_hand)
+		vr_right_hand_model = _create_vr_hand_model(vr_right_hand, 1.0)
+		# Separate OpenXR hand trackers let Quest users switch to optical hand tracking.
+		tracked_left_hand = XRNode3D.new()
+		tracked_left_hand.name = "TrackedLeftHand"
+		tracked_left_hand.set("tracker", "/user/hand_tracker/left")
+		tracked_left_hand.set("pose", "default")
+		xr_origin.add_child(tracked_left_hand)
+		_create_vr_hand_model(tracked_left_hand, -1.0)
+		tracked_right_hand = XRNode3D.new()
+		tracked_right_hand.name = "TrackedRightHand"
+		tracked_right_hand.set("tracker", "/user/hand_tracker/right")
+		tracked_right_hand.set("pose", "default")
+		xr_origin.add_child(tracked_right_hand)
+		_create_vr_hand_model(tracked_right_hand, 1.0)
 	_create_weapon_visual()
+
+func _create_vr_hand_model(parent: Node3D, side: float) -> Node3D:
+	# Lightweight stylized hands built from meshes so they work without extra downloads.
+	var hand := Node3D.new()
+	hand.name = "VRHandModel"
+	parent.add_child(hand)
+	var skin := StandardMaterial3D.new()
+	skin.albedo_color = Color(0.78, 0.57, 0.43)
+	skin.roughness = 0.88
+	var palm := MeshInstance3D.new()
+	var palm_mesh := SphereMesh.new()
+	palm_mesh.radius = 0.065
+	palm_mesh.height = 0.13
+	palm.mesh = palm_mesh
+	palm.scale = Vector3(1.0, 0.42, 1.22)
+	palm.position = Vector3(0, 0, -0.045)
+	palm.material_override = skin
+	hand.add_child(palm)
+	for finger_index in range(4):
+		var finger := MeshInstance3D.new()
+		var finger_mesh := CapsuleMesh.new()
+		finger_mesh.radius = 0.012
+		finger_mesh.height = 0.075 if finger_index == 0 or finger_index == 3 else 0.09
+		finger.mesh = finger_mesh
+		finger.rotation.x = PI * 0.5
+		finger.position = Vector3((float(finger_index) - 1.5) * 0.027, 0, -0.135)
+		finger.material_override = skin
+		hand.add_child(finger)
+	var thumb := MeshInstance3D.new()
+	var thumb_mesh := CapsuleMesh.new()
+	thumb_mesh.radius = 0.014
+	thumb_mesh.height = 0.065
+	thumb.mesh = thumb_mesh
+	thumb.rotation = Vector3(0.0, 0.0, side * -0.72)
+	thumb.position = Vector3(side * 0.075, 0, -0.055)
+	thumb.material_override = skin
+	hand.add_child(thumb)
+	return hand
+
+func _update_vr_hands() -> void:
+	if not vr_enabled:
+		return
+	var left_tracker := XRServer.get_tracker("/user/hand_tracker/left") as XRHandTracker
+	var right_tracker := XRServer.get_tracker("/user/hand_tracker/right") as XRHandTracker
+	var left_optical := left_tracker != null and left_tracker.has_tracking_data
+	var right_optical := right_tracker != null and right_tracker.has_tracking_data
+	if tracked_left_hand:
+		tracked_left_hand.visible = left_optical
+	if tracked_right_hand:
+		tracked_right_hand.visible = right_optical
+	if vr_left_hand_model:
+		vr_left_hand_model.visible = not left_optical
+	if vr_right_hand_model:
+		vr_right_hand_model.visible = not right_optical
 
 func _instantiate_person(model_name: String) -> Node3D:
 	var path := "res://assets/people/" + model_name + ".glb"
@@ -1252,6 +1327,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if is_paused or player_dead:
 		return
+	_update_vr_hands()
 	_update_traffic(delta)
 	_update_police_response(delta)
 	_update_audio(delta)
@@ -1478,8 +1554,12 @@ func _drive_car(delta: float) -> void:
 	car.position.z = clamp(car.position.z, -238, 238)
 	car.position.y = -0.2
 	_check_car_pedestrian_collisions()
-	if Input.is_key_pressed(KEY_SPACE):
+	if Input.is_action_pressed("vehicle_brake"):
 		car_velocity = move_toward(car_velocity, 0, 28 * delta)
+	if vr_enabled:
+		# Keep the headset rig seated in the moving car and aligned with its heading.
+		player.global_position = car.global_position + Vector3(0, 0.65, 0)
+		player.rotation.y = car_yaw
 
 func _try_enter_nearest_car() -> void:
 	var nearest_car: Node3D = null
@@ -1547,6 +1627,8 @@ func _finish_enter_car() -> void:
 	driving = true
 	player.visible = false
 	car_yaw = car.rotation.y
+	if vr_enabled:
+		player.rotation.y = car_yaw
 	camera_pivot.rotation.x = -0.12
 	engine_audio.play()
 
