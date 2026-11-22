@@ -57,6 +57,13 @@ var footstep_audio: AudioStreamPlayer
 var door_audio: AudioStreamPlayer
 var energy_audio: AudioStreamPlayer
 var footstep_timer := 0.0
+var wanted_level := 0
+var police_officer_scene: PackedScene
+var police_helicopter_scene: PackedScene
+var police_units: Array[Node3D] = []
+var police_helicopter: Node3D
+var police_rotors: Array[Node3D] = []
+var helicopter_orbit := 0.0
 
 func _ready() -> void:
 	_setup_controller_inputs()
@@ -69,6 +76,7 @@ func _ready() -> void:
 	_create_npcs()
 	_create_car()
 	_create_traffic()
+	_load_police_assets()
 	_create_hud()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -618,6 +626,90 @@ func _create_npcs() -> void:
 		npc_walk_times[key] = rng.randf_range(2.0, 5.0)
 		npc_states[key] = "walking"
 
+func _load_police_assets() -> void:
+	police_officer_scene = load("res://assets/people/police-officer.glb") as PackedScene
+	police_helicopter_scene = load("res://assets/vehicles/police-helicopter.glb") as PackedScene
+	if police_officer_scene == null:
+		push_warning("Police officer model could not be loaded.")
+	if police_helicopter_scene == null:
+		push_warning("Police helicopter model could not be loaded.")
+
+func _raise_wanted_level() -> void:
+	# Vehicle takeovers are the non-violent arcade event that raises wanted stars.
+	wanted_level = mini(6, wanted_level + 1)
+	_update_hud()
+
+func _spawn_police_unit(index: int, target: Vector3) -> void:
+	if police_officer_scene == null:
+		return
+	var officer := Node3D.new()
+	officer.name = "PoliceOfficer_%02d" % index
+	var model := police_officer_scene.instantiate() as Node3D
+	if model == null:
+		officer.queue_free()
+		return
+	officer.add_child(model)
+	var angle := TAU * float(index) / 6.0
+	officer.global_position = target + Vector3(cos(angle) * 30.0, 0.0, sin(angle) * 30.0)
+	add_child(officer)
+	police_units.append(officer)
+
+func _collect_police_rotors(node: Node) -> void:
+	if node is Node3D and String(node.name).to_lower().contains("rotor"):
+		police_rotors.append(node as Node3D)
+	for child in node.get_children():
+		_collect_police_rotors(child)
+
+func _update_police_response(delta: float) -> void:
+	var target := car.global_position if driving else player.global_position
+	var desired_units := mini(wanted_level, 4)
+	while police_units.size() < desired_units:
+		_spawn_police_unit(police_units.size(), target)
+	while police_units.size() > desired_units:
+		var removed := police_units.pop_back()
+		if is_instance_valid(removed):
+			removed.queue_free()
+	for i in range(police_units.size()):
+		var officer := police_units[i]
+		if not is_instance_valid(officer):
+			continue
+		var destination := target + Vector3(float(i - 1) * 2.4, 0.0, float(i % 2) * 2.0)
+		var offset := destination - officer.global_position
+		offset.y = 0.0
+		if offset.length() > 3.2:
+			officer.global_position += offset.normalized() * 4.2 * delta
+		if officer.global_position.distance_to(target) > 0.25:
+			officer.look_at(Vector3(target.x, officer.global_position.y, target.z), Vector3.UP)
+
+	if wanted_level > 3 and police_helicopter == null and police_helicopter_scene != null:
+		police_helicopter = police_helicopter_scene.instantiate() as Node3D
+		if police_helicopter:
+			police_helicopter.name = "PoliceHelicopter"
+			police_helicopter.scale = Vector3.ONE * 0.85
+			add_child(police_helicopter)
+			police_rotors.clear()
+			_collect_police_rotors(police_helicopter)
+			var searchlight := SpotLight3D.new()
+			searchlight.name = "HelicopterSearchlight"
+			searchlight.position = Vector3(0.0, -0.8, -0.6)
+			searchlight.rotation_degrees.x = -90.0
+			searchlight.light_color = Color(0.78, 0.9, 1.0)
+			searchlight.light_energy = 2.0
+			searchlight.spot_range = 42.0
+			searchlight.spot_angle = 30.0
+			police_helicopter.add_child(searchlight)
+	if wanted_level <= 3 and is_instance_valid(police_helicopter):
+		police_helicopter.queue_free()
+		police_helicopter = null
+		police_rotors.clear()
+	if is_instance_valid(police_helicopter):
+		helicopter_orbit += delta * 0.34
+		police_helicopter.global_position = target + Vector3(cos(helicopter_orbit) * 19.0, 17.0, sin(helicopter_orbit) * 19.0)
+		police_helicopter.look_at(target + Vector3(0.0, 17.0, 0.0), Vector3.UP)
+		for rotor in police_rotors:
+			if is_instance_valid(rotor):
+				rotor.rotate_y(delta * 18.0)
+
 func _create_car() -> void:
 	car = Node3D.new()
 	car.name = "PlayerCar"
@@ -840,7 +932,10 @@ func _quit_game() -> void:
 	get_tree().quit()
 
 func _update_hud() -> void:
-	hud.text = "COASTLINE  |  FREE ROAM  |  EQUIPPED: " + selected_weapon
+	var wanted_stars := ""
+	for star_index in range(6):
+		wanted_stars += "★" if star_index < wanted_level else "☆"
+	hud.text = "COASTLINE  |  FREE ROAM  |  EQUIPPED: " + selected_weapon + "  |  WANTED: " + wanted_stars
 	if driving:
 		help_label.text = "WASD / Left Stick Drive   •   Right Stick Look   •   E / Y Exit   •   LB Wheel"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0)
@@ -896,6 +991,7 @@ func _physics_process(delta: float) -> void:
 	if is_paused:
 		return
 	_update_traffic(delta)
+	_update_police_response(delta)
 	_update_audio(delta)
 	if car_entry_in_progress:
 		_update_camera()
@@ -1070,9 +1166,9 @@ func _spawn_impact_sparks(origin: Vector3) -> void:
 		mesh.height = mesh.radius * 2.0
 		spark.mesh = mesh
 		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(0.05, 0.82, 1.0, 1.0)
+		material.albedo_color = Color(1.0, 0.12, 0.08, 1.0)
 		material.emission_enabled = true
-		material.emission = Color(0.02, 0.55, 0.9)
+		material.emission = Color(1.0, 0.035, 0.015)
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		spark.material_override = material
 		spark.global_position = origin
@@ -1147,6 +1243,7 @@ func _try_enter_nearest_car() -> void:
 		if car_model:
 			_collect_car_wheels(car_model)
 		_react_to_vehicle_takeover()
+		_raise_wanted_level()
 	_enter_car()
 
 func _react_to_vehicle_takeover() -> void:
