@@ -51,12 +51,18 @@ var selected_weapon := "FISTS"
 var weapon_menu_layer: CanvasLayer
 var weapon_visual: Node3D
 var fire_cooldown := 0.0
+var engine_audio: AudioStreamPlayer
+var footstep_audio: AudioStreamPlayer
+var door_audio: AudioStreamPlayer
+var energy_audio: AudioStreamPlayer
+var footstep_timer := 0.0
 
 func _ready() -> void:
 	_setup_controller_inputs()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	rng.randomize()
 	_setup_environment()
+	_setup_audio()
 	_build_world()
 	_create_player()
 	_create_npcs()
@@ -99,6 +105,70 @@ func _setup_environment() -> void:
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	sun.shadow_bias = 0.035
 	add_child(sun)
+
+
+func _setup_audio() -> void:
+	engine_audio = AudioStreamPlayer.new()
+	engine_audio.name = "CarEngineAudio"
+	engine_audio.stream = _make_sfx_stream(58.0, 1.2, 0.16, 0.12, true)
+	engine_audio.volume_db = -13.0
+	add_child(engine_audio)
+	footstep_audio = AudioStreamPlayer.new()
+	footstep_audio.name = "FootstepAudio"
+	footstep_audio.stream = _make_sfx_stream(105.0, 0.12, 0.34, 0.48, false)
+	footstep_audio.volume_db = -8.0
+	add_child(footstep_audio)
+	door_audio = AudioStreamPlayer.new()
+	door_audio.name = "VehicleDoorAudio"
+	door_audio.stream = _make_sfx_stream(92.0, 0.28, 0.42, 0.24, false)
+	door_audio.volume_db = -5.0
+	add_child(door_audio)
+	energy_audio = AudioStreamPlayer.new()
+	energy_audio.name = "ArcadeEnergyAudio"
+	energy_audio.stream = _make_sfx_stream(620.0, 0.19, 0.38, 0.52, false)
+	energy_audio.volume_db = -8.0
+	add_child(energy_audio)
+
+func _make_sfx_stream(frequency: float, duration: float, amplitude: float, noise_mix: float, looping: bool) -> AudioStreamWAV:
+	var sample_rate := 22050
+	var sample_count := int(sample_rate * duration)
+	var samples := PackedInt16Array()
+	samples.resize(sample_count)
+	for i in range(sample_count):
+		var t := float(i) / float(sample_rate)
+		var envelope := 1.0 if looping else exp(-t * 8.0)
+		var tone := sin(TAU * frequency * t) * (1.0 - noise_mix)
+		var noise := rng.randf_range(-1.0, 1.0) * noise_mix
+		var value := clamp((tone + noise) * amplitude * envelope, -1.0, 1.0)
+		samples[i] = int(value * 32767.0)
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = sample_rate
+	stream.stereo = false
+	stream.data = samples.to_byte_array()
+	if looping:
+		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		stream.loop_begin = 0
+		stream.loop_end = sample_count
+	return stream
+
+func _update_audio(delta: float) -> void:
+	if driving:
+		if not engine_audio.playing:
+			engine_audio.play()
+		engine_audio.pitch_scale = clamp(0.72 + abs(car_velocity) / 30.0, 0.72, 1.75)
+	else:
+		if engine_audio.playing:
+			engine_audio.stop()
+		var moving := Vector2(player.velocity.x, player.velocity.z).length() > 1.0 and player.is_on_floor()
+		if moving:
+			footstep_timer -= delta
+			if footstep_timer <= 0.0:
+				footstep_audio.pitch_scale = rng.randf_range(0.88, 1.12)
+				footstep_audio.play()
+				footstep_timer = 0.38 if Input.is_action_pressed("sprint") else 0.52
+		else:
+			footstep_timer = 0.0
 
 func _setup_controller_inputs() -> void:
 	_add_key_action("move_forward", KEY_W)
@@ -477,6 +547,8 @@ func _select_weapon(weapon_name: String) -> void:
 func _fire_selected_weapon() -> void:
 	if selected_weapon == "FISTS":
 		return
+	energy_audio.pitch_scale = rng.randf_range(0.9, 1.12)
+	energy_audio.play()
 	# Stylized arcade energy shot: a direct, forgiving crosshair check.
 	fire_cooldown = 0.22 if selected_weapon == "PULSE" else 0.42
 	var origin := camera.global_position
@@ -821,6 +893,7 @@ func _physics_process(delta: float) -> void:
 	if is_paused:
 		return
 	_update_traffic(delta)
+	_update_audio(delta)
 	if car_entry_in_progress:
 		_update_camera()
 		_update_hud()
@@ -1080,6 +1153,8 @@ func _enter_car() -> void:
 		return
 	car_entry_in_progress = true
 	player.velocity = Vector3.ZERO
+	door_audio.pitch_scale = rng.randf_range(0.92, 1.08)
+	door_audio.play()
 	_play_person_animation(player_anim_player, "walk")
 	var door_position := car.global_position + car.global_transform.basis.x * 1.25 + Vector3(0, 0.15, 0)
 	var seat_position := car.global_position + Vector3(0, 0.65, 0)
@@ -1095,6 +1170,7 @@ func _finish_enter_car() -> void:
 	player.visible = false
 	car_yaw = car.rotation.y
 	camera_pivot.rotation.x = -0.12
+	engine_audio.play()
 
 func _exit_car() -> void:
 	driving = false
@@ -1109,6 +1185,10 @@ func _exit_car() -> void:
 	camera_spring.spring_length = 6.0
 	camera.fov = 74.0
 	car_velocity = 0.0
+	if engine_audio.playing:
+		engine_audio.stop()
+	door_audio.pitch_scale = rng.randf_range(0.92, 1.08)
+	door_audio.play()
 
 func _update_camera() -> void:
 	if driving:
