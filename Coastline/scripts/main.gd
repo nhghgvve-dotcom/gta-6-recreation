@@ -1114,14 +1114,15 @@ func _create_traffic() -> void:
 		var speed := 8.0 + float(i % 3) * 1.4
 		if i % 2 == 1:
 			speed = -speed
-			traffic_car.rotation.y = PI
+		# The imported coupe faces local -Z. Match its nose to the lane direction.
+		traffic_car.rotation.y = PI if speed > 0.0 else 0.0
 		add_child(traffic_car)
 		var model := vehicle_scene.instantiate() as Node3D
 		if model == null:
 			traffic_car.queue_free()
 			continue
 		model.name = "TrafficSportsCoupe"
-		model.rotation.y = PI
+		model.rotation.y = 0.0
 		traffic_car.add_child(model)
 		traffic_cars.append(traffic_car)
 		traffic_speeds.append(speed)
@@ -1200,10 +1201,10 @@ func _create_mission_world() -> void:
 	sign_label.modulate = Color(1.0, 0.83, 0.42)
 	bank.add_child(sign_label)
 	mission_marker = _create_mission_beacon(Vector3(170, 0.1, 195), Color(0.1, 0.85, 1.0), "START MISSION")
-	getaway_marker = _create_mission_beacon(Vector3(-190, 0.1, -190), Color(0.25, 1.0, 0.55), "GETAWAY")
+	getaway_marker = _create_mission_beacon(Vector3(120, 0.1, 180), Color(0.25, 1.0, 0.55), "GETAWAY")
 	getaway_marker.visible = false
-	for index in range(3):
-		var pickup := _create_mission_beacon(Vector3(178.0 + float(index) * 7.0, 0.1, 188.0), Color(1.0, 0.72, 0.18), "DATA CHIP")
+	for index in range(1):
+		var pickup := _create_mission_beacon(Vector3(178.0, 0.1, 188.0), Color(1.0, 0.72, 0.18), "DATA CHIP")
 		pickup.scale = Vector3(0.48, 0.7, 0.48)
 		pickup.visible = false
 		mission_pickups.append(pickup)
@@ -1249,22 +1250,22 @@ func _try_start_mission() -> bool:
 			for pickup in mission_pickups:
 				pickup.visible = true
 			getaway_marker.visible = false
-			wanted_level = max(wanted_level, 1)
+			wanted_level = 0
 			return true
 	return false
 
 func _update_mission() -> void:
 	if mission_state == "collect":
 		for pickup in mission_pickups:
-			if pickup.visible and player.global_position.distance_to(pickup.global_position) < 2.4:
+			if pickup.visible and (player.global_position.distance_to(pickup.global_position) < 10.0 or (driving and car.global_position.distance_to(pickup.global_position) < 10.0)):
 				pickup.visible = false
 				mission_tokens += 1
-			if mission_tokens >= 3:
+			if mission_tokens >= 1:
 				mission_state = "escape"
 				getaway_marker.visible = true
 	elif mission_state == "escape":
 		var target := car.global_position if driving else player.global_position
-		if target.distance_to(getaway_marker.global_position) < 11.0:
+		if target.distance_to(getaway_marker.global_position) < 24.0:
 			mission_state = "complete"
 			getaway_marker.visible = false
 			mission_cash += 5000
