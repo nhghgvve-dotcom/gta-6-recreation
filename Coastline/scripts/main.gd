@@ -139,7 +139,7 @@ func _make_sfx_stream(frequency: float, duration: float, amplitude: float, noise
 		var t := float(i) / float(sample_rate)
 		var envelope := 1.0 if looping else exp(-t * 8.0)
 		var tone := sin(TAU * frequency * t) * (1.0 - noise_mix)
-		var noise := rng.randf_range(-1.0, 1.0) * noise_mix
+		var noise: float = rng.randf_range(-1.0, 1.0) * noise_mix
 		var value := clamp((tone + noise) * amplitude * envelope, -1.0, 1.0)
 		var pcm_sample := int(value * 32767.0)
 		samples[i * 2] = pcm_sample & 0xFF
