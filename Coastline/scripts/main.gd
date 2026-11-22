@@ -1650,7 +1650,7 @@ func _set_mobile_joystick(point: Vector2) -> void:
 		offset = offset.normalized() * mobile_joystick_radius
 	var stick := offset / mobile_joystick_radius
 	_set_mobile_axis("move_left", "move_right", stick.x)
-	_set_mobile_axis("move_forward", "move_back", -stick.y)
+	_set_mobile_axis("move_back", "move_forward", -stick.y)
 	if mobile_joystick_knob:
 		mobile_joystick_knob.offset_left = 82.0 + offset.x
 		mobile_joystick_knob.offset_top = -138.0 + offset.y
