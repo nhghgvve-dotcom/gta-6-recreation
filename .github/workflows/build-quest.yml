@@ -25,7 +25,7 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null
-          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
 
       - name: Set up Godot 4.4.1 and export templates
         uses: chickensoft-games/setup-godot@v2
@@ -63,9 +63,6 @@ jobs:
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
 
-      - name: Install Godot Android build template
-        run: timeout 240s godot --headless --editor --path Coastline --install-android-build-template --quit
-
       - name: Run project startup smoke test
         run: |
           set -o pipefail
@@ -78,7 +75,7 @@ jobs:
       - name: Export Meta Quest Android APK
         run: |
           mkdir -p Coastline/build
-          godot --headless --path Coastline --export-debug "Android" "$GITHUB_WORKSPACE/Coastline/build/Coastline-Quest.apk"
+          godot --headless --path Coastline --install-android-build-template --export-debug "Android" "$GITHUB_WORKSPACE/Coastline/build/Coastline-Quest.apk"
 
       - name: Verify APK
         run: |
