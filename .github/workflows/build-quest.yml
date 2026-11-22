@@ -63,6 +63,9 @@ jobs:
       - name: Import project resources
         run: godot --headless --editor --path Coastline --quit
 
+      - name: Install Godot Android build template
+        run: godot --headless --editor --path Coastline --install-android-build-template
+
       - name: Run project startup smoke test
         run: |
           set -o pipefail
