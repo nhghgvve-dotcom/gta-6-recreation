@@ -1,0 +1,34 @@
+name: Build Coastline Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Coastline/mobile.html'
+      - 'CoastlineAndroid/**'
+      - '.github/workflows/build-coastline-android.yml'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build debug APK
+        run: |
+          mkdir -p CoastlineAndroid/app/src/main/assets
+          cp Coastline/mobile.html CoastlineAndroid/app/src/main/assets/mobile.html
+          cd CoastlineAndroid
+          gradle --no-daemon assembleDebug
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -n 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Coastline-Android-APK
+          path: CoastlineAndroid/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
