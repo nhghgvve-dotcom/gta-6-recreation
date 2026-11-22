@@ -43,7 +43,13 @@ jobs:
         run: godot --headless --editor --path Coastline --quit
 
       - name: Run headless startup smoke test
-        run: godot --headless --path Coastline --quit-after 8
+        run: |
+          set -o pipefail
+          godot --headless --path Coastline --quit-after 8 2>&1 | tee /tmp/coastline-smoke.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' /tmp/coastline-smoke.log; then
+            echo "Godot script errors detected; refusing to export a broken build."
+            exit 1
+          fi
 
       - name: Export Windows build
         run: |
