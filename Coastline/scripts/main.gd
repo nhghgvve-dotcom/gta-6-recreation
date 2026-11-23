@@ -1107,7 +1107,8 @@ func _collect_car_wheels(node: Node) -> void:
 		if child is Node3D:
 			var part_name := String(child.name).to_lower()
 			if part_name.contains("wheel") or part_name.contains("tire") or part_name.contains("tyre"):
-				car_wheels.append(child as Node3D)		_collect_car_wheels(child)
+				car_wheels.append(child as Node3D)
+		_collect_car_wheels(child)
 func _animate_car_wheels(delta: float) -> void:
 	if abs(car_velocity) < 0.01:
 		return
