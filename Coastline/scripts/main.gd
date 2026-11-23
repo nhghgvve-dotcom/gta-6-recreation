@@ -1295,8 +1295,8 @@ func _update_mission() -> void:
 				getaway_marker.visible = true
 				wanted_level = 2
 	elif mission_state == "escape":
-		var target := car.global_position if driving else player.global_position
-		if target.distance_to(getaway_marker.global_position) < 24.0:
+		# The getaway only completes once the player is actually driving a car.
+		if driving and car.global_position.distance_to(getaway_marker.global_position) < 24.0:
 			mission_state = "complete"
 			getaway_marker.visible = false
 			mission_cash += 5000
@@ -1311,7 +1311,7 @@ func _mission_status_text() -> String:
 		"collect":
 			return "FLEECA JOB  •  THE SCORE\nGrab the 3 glowing cash bags: %d/3" % mission_tokens
 		"escape":
-			return "FLEECA JOB  •  GETAWAY\nWanted level active! Reach the green getaway marker."
+			return "FLEECA JOB  •  GETAWAY\nWanted level active! Get in your getaway car and reach the green marker."
 	return ""
 
 func _create_pause_menu() -> void:
