@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#10172b">
+<title>Coastline Galaxy Remote</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(ellipse at top,#26365a,#0b1020 70%);color:#fff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none;user-select:none}
+header{height:54px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;font-weight:900;letter-spacing:.14em;font-size:13px}#status{font-size:11px;letter-spacing:0;color:#7cf4d7}
+main{height:calc(100% - 54px);display:flex;flex-direction:column;justify-content:space-between;padding:12px 16px max(18px,env(safe-area-inset-bottom))}
+#look{flex:1;display:grid;place-items:center;color:#b7c7e6;font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.72;touch-action:none}
+.bottom{display:flex;align-items:end;justify-content:space-between;gap:12px}
+#stick{width:min(38vw,158px);height:min(38vw,158px);border-radius:50%;background:#b8d9ff20;border:2px solid #b8d9ff77;position:relative;touch-action:none;flex:none;box-shadow:0 10px 30px #0005}
+#knob{position:absolute;width:42%;height:42%;left:29%;top:29%;border-radius:50%;background:#8ecbffbb;border:2px solid #e6f4ff;box-shadow:0 4px 20px #0007;pointer-events:none}
+.buttons{display:grid;grid-template-columns:repeat(2,minmax(68px,1fr));gap:9px;max-width:58%;align-items:end}
+button{min-height:52px;border:1px solid #b7d8ff88;border-radius:16px;background:#1a2948e8;color:white;font-weight:850;font-size:11px;letter-spacing:.06em;box-shadow:0 5px 16px #0005;touch-action:none}
+button:active,.down{background:#176d79;border-color:#a4fff0;transform:scale(.96)}
+.primary{background:#168c88;border-color:#9bfff0;min-height:62px}
+footer{font-size:10px;color:#aab8d1;text-align:center;padding-top:12px}
+@media(orientation:landscape){main{flex-direction:row;align-items:stretch;gap:16px}.bottom{width:45%;align-items:center}.buttons{max-width:58%}#look{font-size:10px}}
+</style>
+</head>
+<body>
+<header><span>COASTLINE · GALAXY REMOTE</span><span id="status">CONNECTING…</span></header>
+<main>
+ <div id="look">Drag here to look around</div>
+ <section class="bottom">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="buttons">
+   <button data-key="interact" class="primary">ACTION</button>
+   <button data-key="jump">JUMP</button>
+   <button data-key="sprint">RUN</button>
+   <button data-key="vehicle_brake">BRAKE</button>
+   <button data-key="fire">FIRE</button>
+   <button data-key="pause">PAUSE</button>
+  </div>
+ </section>
+ <footer>Keep your Galaxy and Windows laptop on the same Wi-Fi network.</footer>
+</main>
+<script>
+(()=>{
+ const status=document.getElementById('status'),stick=document.getElementById('stick'),knob=document.getElementById('knob'),look=document.getElementById('look');
+ const state={x:0,y:0,look_x:0,look_y:0,jump:false,sprint:false,vehicle_brake:false,fire:false,interact:false,pause:false};
+ let stickId=null,lookId=null,lastLook=null,connected=false;
+ function setStick(e){const r=stick.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),max=r.width*.32,len=Math.hypot(dx,dy),scale=Math.min(1,max/(len||1));state.x=dx*scale/max;state.y=dy*scale/max;knob.style.transform='translate('+dx*scale+'px,'+dy*scale+'px)'}
+ stick.addEventListener('pointerdown',e=>{e.preventDefault();stickId=e.pointerId;stick.setPointerCapture(stickId);setStick(e)});
+ stick.addEventListener('pointermove',e=>{if(e.pointerId===stickId)setStick(e)});
+ function releaseStick(e){if(e.pointerId===stickId){stickId=null;state.x=state.y=0;knob.style.transform='translate(0,0)'}}
+ stick.addEventListener('pointerup',releaseStick);stick.addEventListener('pointercancel',releaseStick);
+ look.addEventListener('pointerdown',e=>{lookId=e.pointerId;lastLook={x:e.clientX,y:e.clientY};look.setPointerCapture(lookId)});
+ look.addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;state.look_x+=(e.clientX-lastLook.x);state.look_y+=(e.clientY-lastLook.y);lastLook={x:e.clientX,y:e.clientY}});
+ function releaseLook(e){if(e.pointerId===lookId){lookId=null;lastLook=null}}
+ look.addEventListener('pointerup',releaseLook);look.addEventListener('pointercancel',releaseLook);
+ document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;const down=e=>{e.preventDefault();state[k]=true;b.classList.add('down')};const up=e=>{e.preventDefault();state[k]=false;b.classList.remove('down')};b.addEventListener('pointerdown',down);b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('lostpointercapture',up)});
+ async function send(){const payload={...state};state.look_x=0;state.look_y=0;try{const r=await fetch('/input',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store'});connected=r.ok}catch(e){connected=false}status.textContent=connected?'CONNECTED':'RECONNECTING…';status.style.color=connected?'#7cf4d7':'#ffba85'}
+ setInterval(send,50);send();
+})();
+</script>
+</body>
+</html>
