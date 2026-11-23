@@ -99,9 +99,17 @@ var mobile_joystick_touch_id := -1
 var mobile_look_touch_id := -1
 var mobile_joystick_center := Vector2.ZERO
 var mobile_joystick_radius := 58.0
+var remote_server := TCPServer.new()
+var remote_clients: Array[Dictionary] = []
+var remote_move := Vector2.ZERO
+var remote_look := Vector2.ZERO
+var remote_last_input_msec := 0
+var remote_controller_url := ""
+var remote_status_label: Label
 
 func _ready() -> void:
 	_setup_controller_inputs()
+	_start_remote_controller()
 	_setup_vr()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	rng.randomize()
@@ -1182,6 +1190,11 @@ func _create_hud() -> void:
 	mission_status_label.add_theme_constant_override("shadow_offset_x", 2)
 	mission_status_label.add_theme_constant_override("shadow_offset_y", 2)
 	layer.add_child(mission_status_label)
+	remote_status_label = Label.new()
+	remote_status_label.position = Vector2(24, 610)
+	remote_status_label.add_theme_font_size_override("font_size", 14)
+	remote_status_label.add_theme_color_override("font_color", Color(0.65, 0.94, 1.0))
+	layer.add_child(remote_status_label)
 	_create_pause_menu()
 	_create_weapon_menu()
 	_create_mobile_controls(layer)
@@ -1826,6 +1839,126 @@ func _unhandled_input(event: InputEvent) -> void:
 			_exit_car()
 		elif not _try_start_mission():
 			_try_enter_nearest_car()
+
+func _process(delta: float) -> void:
+	_poll_remote_controller()
+	if remote_last_input_msec > 0 and Time.get_ticks_msec() - remote_last_input_msec > 700:
+		_set_remote_action("move_left", false)
+		_set_remote_action("move_right", false)
+		_set_remote_action("move_forward", false)
+		_set_remote_action("move_back", false)
+		for action in ["jump", "sprint", "vehicle_brake", "fire"]:
+			_set_remote_action(action, false)
+		remote_move = Vector2.ZERO
+	if remote_look.length() > 0.001 and not is_paused:
+		if driving:
+			car_yaw -= remote_look.x * 0.0025
+			camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - remote_look.y * 0.002, -0.45, 0.25)
+		else:
+			player.rotation.y -= remote_look.x * 0.0025
+			camera_pivot.rotation.x = clamp(camera_pivot.rotation.x - remote_look.y * 0.002, -0.65, 0.35)
+		remote_look = Vector2.ZERO
+	if remote_status_label:
+		remote_status_label.text = "GALAXY REMOTE: " + remote_controller_url + ("  •  CONNECTED" if Time.get_ticks_msec() - remote_last_input_msec < 1800 and remote_last_input_msec > 0 else "  •  WAITING")
+
+func _start_remote_controller() -> void:
+	var error := remote_server.listen(8765, "0.0.0.0")
+	if error != OK:
+		push_warning("Galaxy Remote could not start on port 8765: " + str(error))
+		return
+	for address in IP.get_local_addresses():
+		if address.contains(".") and not address.begins_with("127.") and not address.begins_with("169.254."):
+			remote_controller_url = "http://" + address + ":8765"
+			break
+	if remote_controller_url == "":
+		remote_controller_url = "http://<laptop-ip>:8765"
+	print("Galaxy Remote controller: " + remote_controller_url)
+
+func _poll_remote_controller() -> void:
+	while remote_server.is_connection_available():
+		var peer := remote_server.take_connection()
+		remote_clients.append({"peer": peer, "buffer": PackedByteArray()})
+	for index in range(remote_clients.size() - 1, -1, -1):
+		var client: Dictionary = remote_clients[index]
+		var peer: StreamPeerTCP = client["peer"]
+		peer.poll()
+		if peer.get_status() == StreamPeerTCP.STATUS_NONE or peer.get_status() == StreamPeerTCP.STATUS_ERROR:
+			remote_clients.remove_at(index)
+			continue
+		var available := peer.get_available_bytes()
+		if available > 0:
+			var packet := peer.get_data(available)
+			if packet[0] == OK:
+				var buffer: PackedByteArray = client["buffer"]
+				buffer.append_array(packet[1])
+				client["buffer"] = buffer
+		var data: PackedByteArray = client["buffer"]
+		var header_end := data.find("\r\n\r\n".to_utf8_buffer())
+		if header_end < 0:
+			continue
+		var header_text := data.slice(0, header_end).get_string_from_utf8()
+		var content_length := 0
+		for line in header_text.split("\r\n"):
+			if line.to_lower().begins_with("content-length:"):
+				content_length = int(line.split(":")[1].strip_edges())
+		var body_start := header_end + 4
+		if data.size() < body_start + content_length:
+			continue
+		var request_line := header_text.split("\r\n")[0]
+		var body := data.slice(body_start, body_start + content_length).get_string_from_utf8()
+		var response_body := ""
+		var content_type := "text/plain; charset=utf-8"
+		var status := "200 OK"
+		if request_line.begins_with("GET / ") or request_line.begins_with("GET /controller"):
+			var controller_path := "res://galaxy_controller.html"
+			if FileAccess.file_exists(controller_path):
+				response_body = FileAccess.get_file_as_string(controller_path)
+				content_type = "text/html; charset=utf-8"
+			else:
+				status = "404 Not Found"
+				response_body = "Galaxy controller page is missing."
+		elif request_line.begins_with("POST /input"):
+			var parsed = JSON.parse_string(body)
+			if parsed is Dictionary:
+				_apply_remote_payload(parsed)
+			response_body = "ok"
+		elif request_line.begins_with("GET /health"):
+			response_body = "Coastline Galaxy Remote ready"
+		else:
+			status = "404 Not Found"
+			response_body = "Not found"
+		var response_bytes := response_body.to_utf8_buffer()
+		var header := "HTTP/1.1 " + status + "\r\nContent-Type: " + content_type + "\r\nContent-Length: " + str(response_bytes.size()) + "\r\nConnection: close\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\n\r\n"
+		peer.put_data(header.to_utf8_buffer())
+		peer.put_data(response_bytes)
+		peer.disconnect_from_host()
+		remote_clients.remove_at(index)
+
+func _apply_remote_payload(data: Dictionary) -> void:
+	remote_last_input_msec = Time.get_ticks_msec()
+	remote_move = Vector2(float(data.get("x", 0.0)), float(data.get("y", 0.0)))
+	remote_look += Vector2(float(data.get("look_x", 0.0)), float(data.get("look_y", 0.0)))
+	_set_remote_action("move_left", remote_move.x < -0.18)
+	_set_remote_action("move_right", remote_move.x > 0.18)
+	_set_remote_action("move_forward", remote_move.y < -0.18)
+	_set_remote_action("move_back", remote_move.y > 0.18)
+	for action in ["jump", "sprint", "vehicle_brake", "fire"]:
+		_set_remote_action(action, bool(data.get(action, false)))
+	if bool(data.get("interact", false)) and not bool(data.get("interact_prev", false)):
+		if driving:
+			_exit_car()
+		elif not _try_start_mission():
+			_try_enter_nearest_car()
+	if bool(data.get("pause", false)):
+		_set_paused(not is_paused)
+
+func _set_remote_action(action: String, pressed: bool) -> void:
+	if not InputMap.has_action(action):
+		return
+	if pressed and not Input.is_action_pressed(action):
+		Input.action_press(action)
+	elif not pressed and Input.is_action_pressed(action):
+		Input.action_release(action)
 
 func _physics_process(delta: float) -> void:
 	if is_paused or player_dead:
