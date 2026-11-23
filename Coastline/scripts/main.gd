@@ -1097,8 +1097,7 @@ func _collect_car_wheels(node: Node) -> void:
 		if child is Node3D:
 			var part_name := String(child.name).to_lower()
 			if part_name.contains("wheel") or part_name.contains("tire") or part_name.contains("tyre"):
-				car_wheels.append(child as Node3D)
-		_collect_car_wheels(child)
+				car_wheels.append(child as Node3D)		_collect_car_wheels(child)
 func _animate_car_wheels(delta: float) -> void:
 	if abs(car_velocity) < 0.01:
 		return
@@ -1609,7 +1608,7 @@ func _update_hud() -> void:
 		mission_status_label.text = _mission_status_text()
 	if vr_enabled:
 		help_label.text = "VR: Head tracking active  •  Left stick move  •  Right stick look  •  E / Y interact"
-	elif OS.get_name() == "Android" or OS.get_name() == "iOS":
+	elif OS.get_name() == "Android" or OS.get_name() == "iOS" or DisplayServer.is_touchscreen_available():
 		help_label.text = "Touch joystick: move / steer   •   Drag right side: look   •   ACTION: enter / exit / mission"
 		speed_label.text = "%03d km/h" % int(abs(car_velocity) * 3.0) if driving else "ON FOOT"
 	elif driving:
@@ -1620,7 +1619,7 @@ func _update_hud() -> void:
 		speed_label.text = "ON FOOT"
 
 func _create_mobile_controls(layer: CanvasLayer) -> void:
-	if OS.get_name() != "Android" and OS.get_name() != "iOS":
+	if OS.get_name() != "Android" and OS.get_name() != "iOS" and not DisplayServer.is_touchscreen_available():
 		return
 	layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	help_label.visible = false
