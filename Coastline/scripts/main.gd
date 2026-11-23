@@ -1226,8 +1226,15 @@ func _create_mission_world() -> void:
 	mission_marker = _create_mission_beacon(Vector3(170, 0.1, 195), Color(0.1, 0.85, 1.0), "START MISSION")
 	getaway_marker = _create_mission_beacon(Vector3(120, 0.1, 180), Color(0.25, 1.0, 0.55), "GETAWAY")
 	getaway_marker.visible = false
-	for index in range(1):
-		var pickup := _create_mission_beacon(Vector3(178.0, 0.1, 188.0), Color(1.0, 0.72, 0.18), "DATA CHIP")
+	# Fleeca-style arcade heist: glowing loot bags are mission collectibles,
+	# not a simulation of real bank security or robbery procedures.
+	var loot_spots := [
+		Vector3(178.0, 0.1, 188.0),
+		Vector3(190.0, 0.1, 188.0),
+		Vector3(202.0, 0.1, 188.0)
+	]
+	for spot in loot_spots:
+		var pickup := _create_mission_beacon(spot, Color(1.0, 0.72, 0.18), "CASH BAG")
 		pickup.scale = Vector3(0.48, 0.7, 0.48)
 		pickup.visible = false
 		mission_pickups.append(pickup)
@@ -1283,9 +1290,10 @@ func _update_mission() -> void:
 			if pickup.visible and (player.global_position.distance_to(pickup.global_position) < 10.0 or (driving and car.global_position.distance_to(pickup.global_position) < 10.0)):
 				pickup.visible = false
 				mission_tokens += 1
-			if mission_tokens >= 1:
+			if mission_tokens >= mission_pickups.size():
 				mission_state = "escape"
 				getaway_marker.visible = true
+				wanted_level = 2
 	elif mission_state == "escape":
 		var target := car.global_position if driving else player.global_position
 		if target.distance_to(getaway_marker.global_position) < 24.0:
@@ -1299,11 +1307,11 @@ func _update_mission() -> void:
 func _mission_status_text() -> String:
 	match mission_state:
 		"available", "complete":
-			return "MISSION: THE BIG SCORE\n" + ("COMPLETE  •  $5,000 REWARD\nReturn to the blue marker to replay." if mission_state == "complete" else "Blue marker at Coastline Bank  •  Press E / Y to begin.")
+			return "FLEECA JOB\n" + ("HEIST COMPLETE  •  $5,000 TAKE\nLose the heat and return to the blue marker to replay." if mission_state == "complete" else "Meet your crew outside Coastline Bank  •  Press E / Y to start.")
 		"collect":
-			return "THE BIG SCORE  •  OBJECTIVE 1/2\nCollect the 3 glowing data chips: %d/3" % mission_tokens
+			return "FLEECA JOB  •  THE SCORE\nGrab the 3 glowing cash bags: %d/3" % mission_tokens
 		"escape":
-			return "THE BIG SCORE  •  OBJECTIVE 2/2\nReach the green getaway marker. Find a car!"
+			return "FLEECA JOB  •  GETAWAY\nWanted level active! Reach the green getaway marker."
 	return ""
 
 func _create_pause_menu() -> void:
@@ -1619,7 +1627,7 @@ func _update_hud() -> void:
 	var wanted_stars := ""
 	for star_index in range(6):
 		wanted_stars += "★" if star_index < wanted_level else "☆"
-	hud.text = "COASTLINE  |  " + ("THE BIG SCORE" if mission_state != "available" and mission_state != "complete" else "FREE ROAM") + "  |  CASH: $" + str(mission_cash) + "  |  EQUIPPED: " + selected_weapon + "  |  WANTED: " + wanted_stars
+	hud.text = "COASTLINE  |  " + ("FLEECA JOB" if mission_state != "available" and mission_state != "complete" else "FREE ROAM") + "  |  CASH: $" + str(mission_cash) + "  |  EQUIPPED: " + selected_weapon + "  |  WANTED: " + wanted_stars
 	if mission_status_label:
 		mission_status_label.text = _mission_status_text()
 	if vr_enabled:
