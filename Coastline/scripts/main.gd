@@ -105,6 +105,8 @@ var remote_move := Vector2.ZERO
 var remote_look := Vector2.ZERO
 var remote_last_input_msec := 0
 var remote_controller_url := ""
+var remote_interact_down := false
+var remote_pause_down := false
 var remote_status_label: Label
 
 func _ready() -> void:
@@ -1893,7 +1895,7 @@ func _poll_remote_controller() -> void:
 				buffer.append_array(packet[1])
 				client["buffer"] = buffer
 		var data: PackedByteArray = client["buffer"]
-		var header_end := data.find("\r\n\r\n".to_utf8_buffer())
+		var header_end := data.get_string_from_utf8().find("\r\n\r\n")
 		if header_end < 0:
 			continue
 		var header_text := data.slice(0, header_end).get_string_from_utf8()
@@ -1944,13 +1946,17 @@ func _apply_remote_payload(data: Dictionary) -> void:
 	_set_remote_action("move_back", remote_move.y > 0.18)
 	for action in ["jump", "sprint", "vehicle_brake", "fire"]:
 		_set_remote_action(action, bool(data.get(action, false)))
-	if bool(data.get("interact", false)) and not bool(data.get("interact_prev", false)):
+	var interact_now := bool(data.get("interact", false))
+	if interact_now and not remote_interact_down:
 		if driving:
 			_exit_car()
 		elif not _try_start_mission():
 			_try_enter_nearest_car()
-	if bool(data.get("pause", false)):
+	remote_interact_down = interact_now
+	var pause_now := bool(data.get("pause", false))
+	if pause_now and not remote_pause_down:
 		_set_paused(not is_paused)
+	remote_pause_down = pause_now
 
 func _set_remote_action(action: String, pressed: bool) -> void:
 	if not InputMap.has_action(action):
