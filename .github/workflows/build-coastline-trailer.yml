@@ -1,0 +1,73 @@
+name: Build Coastline Trailer MP4
+
+on:
+  workflow_dispatch:
+    inputs:
+      fps:
+        description: Frames per second
+        required: true
+        default: "24"
+        type: choice
+        options:
+          - "12"
+          - "24"
+          - "30"
+          - "60"
+
+permissions:
+  contents: read
+
+jobs:
+  render-trailer:
+    name: Compile numbered frames into MP4
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Coastline
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Validate trailer frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f trailer/frames/frame_0001.png ]]; then
+            echo "::error::Missing trailer/frames/frame_0001.png"
+            echo "Add numbered PNG frames: frame_0001.png, frame_0002.png, ..."
+            exit 1
+          fi
+          count=$(find trailer/frames -maxdepth 1 -type f -regextype posix-extended -regex '.*/frame_[0-9]{4}\.png' | wc -l)
+          if [[ "$count" -lt 2 ]]; then
+            echo "::error::At least two numbered PNG frames are required."
+            exit 1
+          fi
+          echo "Found $count frame(s)."
+          echo "FRAME_COUNT=$count" >> "$GITHUB_ENV"
+
+      - name: Render MP4
+        env:
+          FPS: ${{ inputs.fps }}
+        run: |
+          mkdir -p output
+          ffmpeg -y \
+            -framerate "$FPS" \
+            -start_number 1 \
+            -i trailer/frames/frame_%04d.png \
+            -frames:v "$FRAME_COUNT" \
+            -c:v libx264 \
+            -preset medium \
+            -crf 18 \
+            -pix_fmt yuv420p \
+            -movflags +faststart \
+            output/Coastline-Trailer.mp4
+
+      - name: Upload finished MP4
+        uses: actions/upload-artifact@v4
+        with:
+          name: Coastline-Trailer-MP4
+          path: output/Coastline-Trailer.mp4
+          if-no-files-found: error
+          retention-days: 14
