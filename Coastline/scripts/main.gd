@@ -111,6 +111,20 @@ var remote_interact_down := false
 var remote_pause_down := false
 var remote_status_label: Label
 
+# Cross-platform internet multiplayer client.
+var multiplayer_socket := WebSocketPeer.new()
+var multiplayer_server_url := "wss://coastline-multiplayer.onrender.com"
+var multiplayer_room := ""
+var multiplayer_player_id := ""
+var multiplayer_connected := false
+var multiplayer_sync_timer := 0.0
+var multiplayer_panel: PanelContainer
+var multiplayer_status_label: Label
+var multiplayer_server_input: LineEdit
+var multiplayer_room_input: LineEdit
+var multiplayer_remote_players: Dictionary = {}
+var multiplayer_remote_targets: Dictionary = {}
+
 func _ready() -> void:
 	_setup_controller_inputs()
 	_start_remote_controller()
@@ -1203,6 +1217,7 @@ func _create_hud() -> void:
 	_create_pause_menu()
 	_create_weapon_menu()
 	_create_mobile_controls(layer)
+	_create_multiplayer_ui(layer)
 	_update_hud()
 
 func _create_mission_world() -> void:
@@ -1900,6 +1915,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_try_enter_nearest_car()
 
 func _process(delta: float) -> void:
+	_poll_multiplayer(delta)
+	_update_remote_player_visuals(delta)
 	_poll_remote_controller()
 	if remote_last_input_msec > 0 and Time.get_ticks_msec() - remote_last_input_msec > 700:
 		_set_remote_action("move_left", false)
@@ -1932,6 +1949,223 @@ func _start_remote_controller() -> void:
 	if remote_controller_url == "":
 		remote_controller_url = "http://<laptop-ip>:8765"
 	print("Galaxy Remote controller: " + remote_controller_url)
+
+
+func _create_multiplayer_ui(layer: CanvasLayer) -> void:
+	var open_button := Button.new()
+	open_button.text = "MULTIPLAYER"
+	open_button.position = Vector2(24, 48)
+	open_button.size = Vector2(150, 38)
+	open_button.z_index = 10
+	open_button.pressed.connect(_toggle_multiplayer_panel)
+	layer.add_child(open_button)
+	multiplayer_panel = PanelContainer.new()
+	multiplayer_panel.name = "MultiplayerPanel"
+	multiplayer_panel.position = Vector2(350, 170)
+	multiplayer_panel.custom_minimum_size = Vector2(580, 390)
+	multiplayer_panel.z_index = 30
+	multiplayer_panel.visible = false
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.025, 0.045, 0.09, 0.97)
+	style.border_color = Color(0.25, 0.78, 0.95, 0.95)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	multiplayer_panel.add_theme_stylebox_override("panel", style)
+	layer.add_child(multiplayer_panel)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 12)
+	multiplayer_panel.add_child(stack)
+	var heading := Label.new()
+	heading.text = "COASTLINE ONLINE"
+	heading.add_theme_font_size_override("font_size", 28)
+	heading.add_theme_color_override("font_color", Color(0.55, 0.88, 1.0))
+	stack.add_child(heading)
+	var info := Label.new()
+	info.text = "Play across Windows, Android and Meta Quest."
+	stack.add_child(info)
+	var server_caption := Label.new()
+	server_caption.text = "SERVER ADDRESS"
+	stack.add_child(server_caption)
+	multiplayer_server_input = LineEdit.new()
+	multiplayer_server_input.text = multiplayer_server_url
+	multiplayer_server_input.placeholder_text = "wss://your-server.onrender.com"
+	stack.add_child(multiplayer_server_input)
+	var room_caption := Label.new()
+	room_caption.text = "ROOM CODE"
+	stack.add_child(room_caption)
+	multiplayer_room_input = LineEdit.new()
+	multiplayer_room_input.placeholder_text = "Enter your cousin's code"
+	multiplayer_room_input.max_length = 8
+	stack.add_child(multiplayer_room_input)
+	var buttons := HBoxContainer.new()
+	stack.add_child(buttons)
+	var host_button := Button.new()
+	host_button.text = "CREATE ROOM"
+	host_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	host_button.pressed.connect(_host_multiplayer_room)
+	buttons.add_child(host_button)
+	var join_button := Button.new()
+	join_button.text = "JOIN ROOM"
+	join_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	join_button.pressed.connect(_join_multiplayer_room)
+	buttons.add_child(join_button)
+	multiplayer_status_label = Label.new()
+	multiplayer_status_label.text = "Not connected. Create a room or enter a code."
+	multiplayer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	stack.add_child(multiplayer_status_label)
+	var close_button := Button.new()
+	close_button.text = "CLOSE"
+	close_button.pressed.connect(_toggle_multiplayer_panel)
+	stack.add_child(close_button)
+
+
+func _toggle_multiplayer_panel() -> void:
+	if multiplayer_panel:
+		multiplayer_panel.visible = not multiplayer_panel.visible
+
+
+func _host_multiplayer_room() -> void:
+	var alphabet := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	var code := ""
+	for i in range(6):
+		code += alphabet[rng.randi_range(0, alphabet.length() - 1)]
+	multiplayer_room_input.text = code
+	_connect_multiplayer(code)
+
+
+func _join_multiplayer_room() -> void:
+	var code := multiplayer_room_input.text.strip_edges().to_upper()
+	if code.length() < 4 or code.length() > 8:
+		_set_multiplayer_status("Room codes must be 4–8 characters.")
+		return
+	_connect_multiplayer(code)
+
+
+func _connect_multiplayer(code: String) -> void:
+	if multiplayer_socket.get_ready_state() != WebSocketPeer.STATE_CLOSED:
+		multiplayer_socket.close()
+	multiplayer_socket = WebSocketPeer.new()
+	multiplayer_server_url = multiplayer_server_input.text.strip_edges().trim_suffix("/")
+	if not multiplayer_server_url.begins_with("wss://") and not multiplayer_server_url.begins_with("ws://"):
+		_set_multiplayer_status("Server address must start with wss:// or ws://.")
+		return
+	multiplayer_room = code
+	multiplayer_player_id = ""
+	multiplayer_connected = false
+	for old_id in multiplayer_remote_players.keys():
+		var old_node: Node3D = multiplayer_remote_players[old_id]
+		if is_instance_valid(old_node):
+			old_node.queue_free()
+	multiplayer_remote_players.clear()
+	multiplayer_remote_targets.clear()
+	var url := multiplayer_server_url + "/?room=" + code.uri_encode() + "&name=CoastlinePlayer"
+	var error := multiplayer_socket.connect_to_url(url)
+	if error != OK:
+		_set_multiplayer_status("Connection error: " + str(error))
+	else:
+		_set_multiplayer_status("Connecting to room " + code + "...")
+
+
+func _set_multiplayer_status(message: String) -> void:
+	if multiplayer_status_label:
+		multiplayer_status_label.text = message
+
+
+func _poll_multiplayer(delta: float) -> void:
+	multiplayer_socket.poll()
+	var state := multiplayer_socket.get_ready_state()
+	if state == WebSocketPeer.STATE_OPEN:
+		if not multiplayer_connected:
+			multiplayer_connected = true
+			_set_multiplayer_status("Connected! Room " + multiplayer_room + ". Share the code.")
+		while multiplayer_socket.get_available_packet_count() > 0:
+			var parsed = JSON.parse_string(multiplayer_socket.get_packet().get_string_from_utf8())
+			if parsed is Dictionary:
+				_handle_multiplayer_message(parsed)
+		multiplayer_sync_timer += delta
+		if multiplayer_sync_timer >= 0.10 and player != null:
+			multiplayer_sync_timer = 0.0
+			var p := player.global_position
+			multiplayer_socket.send_text(JSON.stringify({
+				"type": "state",
+				"position": [p.x, p.y, p.z],
+				"rotation": player.rotation.y,
+				"driving": driving
+			}))
+	elif state == WebSocketPeer.STATE_CLOSED and multiplayer_connected:
+		multiplayer_connected = false
+		_set_multiplayer_status("Disconnected from online room.")
+
+
+func _handle_multiplayer_message(message: Dictionary) -> void:
+	var kind := str(message.get("type", ""))
+	if kind == "welcome":
+		multiplayer_player_id = str(message.get("id", ""))
+		var players = message.get("players", [])
+		if players is Array:
+			for item in players:
+				if item is Dictionary:
+					_upsert_remote_player(item)
+		_set_multiplayer_status("Room " + multiplayer_room + " • Connected. Share this code!")
+	elif kind == "player_joined" or kind == "state":
+		_upsert_remote_player(message)
+	elif kind == "player_left":
+		var left_id := str(message.get("id", ""))
+		if multiplayer_remote_players.has(left_id):
+			var old_node: Node3D = multiplayer_remote_players[left_id]
+			old_node.queue_free()
+			multiplayer_remote_players.erase(left_id)
+			multiplayer_remote_targets.erase(left_id)
+	elif kind == "error":
+		_set_multiplayer_status(str(message.get("message", "Online server error.")))
+
+
+func _upsert_remote_player(data: Dictionary) -> void:
+	var peer_id := str(data.get("id", ""))
+	var coords = data.get("position", [0.0, 0.0, 0.0])
+	if peer_id == "" or peer_id == multiplayer_player_id or not coords is Array or coords.size() < 3:
+		return
+	var target := Vector3(float(coords[0]), float(coords[1]), float(coords[2]))
+	var remote_node: Node3D
+	if multiplayer_remote_players.has(peer_id):
+		remote_node = multiplayer_remote_players[peer_id]
+	else:
+		remote_node = Node3D.new()
+		remote_node.name = "OnlinePlayer_" + peer_id
+		var body := MeshInstance3D.new()
+		var capsule := CapsuleMesh.new()
+		capsule.radius = 0.38
+		capsule.height = 1.75
+		body.mesh = capsule
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color(0.18, 0.72, 1.0)
+		material.emission_enabled = true
+		material.emission = Color(0.04, 0.18, 0.28)
+		body.material_override = material
+		body.position.y = 0.85
+		remote_node.add_child(body)
+		var tag := Label3D.new()
+		tag.text = "ONLINE PLAYER"
+		tag.position.y = 2.0
+		tag.font_size = 32
+		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		remote_node.add_child(tag)
+		add_child(remote_node)
+		multiplayer_remote_players[peer_id] = remote_node
+	multiplayer_remote_targets[peer_id] = {"position": target, "rotation": float(data.get("rotation", 0.0))}
+
+
+func _update_remote_player_visuals(delta: float) -> void:
+	for peer_id in multiplayer_remote_players.keys():
+		var remote_node: Node3D = multiplayer_remote_players[peer_id]
+		if not is_instance_valid(remote_node):
+			continue
+		var target: Dictionary = multiplayer_remote_targets.get(peer_id, {})
+		if target.is_empty():
+			continue
+		remote_node.global_position = remote_node.global_position.lerp(target["position"], min(1.0, delta * 12.0))
+		remote_node.rotation.y = lerp_angle(remote_node.rotation.y, float(target["rotation"]), min(1.0, delta * 12.0))
+
 
 func _poll_remote_controller() -> void:
 	while remote_server.is_connection_available():
