@@ -1148,8 +1148,9 @@ func _create_traffic() -> void:
 		var speed := 8.0 + float(i % 3) * 1.4
 		if i % 2 == 1:
 			speed = -speed
-		# The imported coupe faces local -Z. Match its nose to the lane direction.
-		traffic_car.rotation.y = PI if speed > 0.0 else 0.0
+		# This imported coupe's visible front points along local +Z.
+		# Rotate it toward the direction it travels on the Z-axis road.
+		traffic_car.rotation.y = 0.0 if speed > 0.0 else PI
 		add_child(traffic_car)
 		var model := vehicle_scene.instantiate() as Node3D
 		if model == null:
