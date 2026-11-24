@@ -89,6 +89,8 @@ var tracked_right_hand: XRNode3D
 var mission_state := "available"
 var mission_cash := 0
 var mission_tokens := 0
+var mission_phase_timer := 0.0
+var mission_crew_member: Node3D
 var mission_marker: Node3D
 var getaway_marker: Node3D
 var mission_pickups: Array[Node3D] = []
@@ -1212,10 +1214,17 @@ func _create_mission_world() -> void:
 	var stone := _mat(Color(0.72, 0.76, 0.78), 0.62)
 	var glass := _mat(Color(0.08, 0.48, 0.62), 0.2, 0.25)
 	var gold := _mat(Color(0.98, 0.72, 0.22), 0.3, 0.25)
-	_static_box(bank, Vector3(0, 5.5, 0), Vector3(28, 11, 22), stone)
+	# Playable bank shell with a wide front entrance.
+	_static_box(bank, Vector3(-13.0, 5.5, 0), Vector3(2, 11, 22), stone)
+	_static_box(bank, Vector3(13.0, 5.5, 0), Vector3(2, 11, 22), stone)
+	_static_box(bank, Vector3(0, 5.5, 10), Vector3(24, 11, 2), stone)
+	_static_box(bank, Vector3(-9.0, 5.5, -10), Vector3(10, 11, 2), stone)
+	_static_box(bank, Vector3(9.0, 5.5, -10), Vector3(10, 11, 2), stone)
+	_static_box(bank, Vector3(0, -0.25, 0), Vector3(24, 0.5, 22), stone)
 	_mesh_box(bank, Vector3(0, 10.9, 0), Vector3(29, 0.8, 23), gold, "BankRoofTrim")
 	_mesh_box(bank, Vector3(0, 4.8, -11.15), Vector3(12, 5.2, 0.3), glass, "BankFrontWindows")
 	_mesh_box(bank, Vector3(0, 2.0, -11.3), Vector3(3.0, 4.0, 0.5), gold, "BankEntrance")
+	_mesh_box(bank, Vector3(0, 1.2, 8.7), Vector3(8, 2.4, 0.5), gold, "VaultFeatureDoor")
 	var sign_label := Label3D.new()
 	sign_label.text = "COASTLINE BANK"
 	sign_label.font_size = 64
@@ -1229,15 +1238,41 @@ func _create_mission_world() -> void:
 	# Fleeca-style arcade heist: glowing loot bags are mission collectibles,
 	# not a simulation of real bank security or robbery procedures.
 	var loot_spots := [
-		Vector3(178.0, 0.1, 188.0),
-		Vector3(190.0, 0.1, 188.0),
-		Vector3(202.0, 0.1, 188.0)
+		Vector3(184.0, 0.1, 215.0),
+		Vector3(190.0, 0.1, 215.0),
+		Vector3(196.0, 0.1, 215.0)
 	]
 	for spot in loot_spots:
 		var pickup := _create_mission_beacon(spot, Color(1.0, 0.72, 0.18), "CASH BAG")
 		pickup.scale = Vector3(0.48, 0.7, 0.48)
 		pickup.visible = false
 		mission_pickups.append(pickup)
+	mission_crew_member = Node3D.new()
+	mission_crew_member.name = "FleecaCrewPartner"
+	mission_crew_member.position = Vector3(174, 0, 195)
+	add_child(mission_crew_member)
+	var crew_body := MeshInstance3D.new()
+	var crew_mesh := CapsuleMesh.new()
+	crew_mesh.radius = 0.42
+	crew_mesh.height = 1.8
+	crew_body.mesh = crew_mesh
+	crew_body.position.y = 0.9
+	crew_body.material_override = _mat(Color(0.08, 0.12, 0.2), 0.3)
+	mission_crew_member.add_child(crew_body)
+	var crew_head := MeshInstance3D.new()
+	var head_mesh := SphereMesh.new()
+	head_mesh.radius = 0.28
+	crew_head.mesh = head_mesh
+	crew_head.position.y = 1.95
+	crew_head.material_override = _mat(Color(0.72, 0.48, 0.32), 0.6)
+	mission_crew_member.add_child(crew_head)
+	var crew_tag := Label3D.new()
+	crew_tag.text = "YOUR CREW"
+	crew_tag.position.y = 2.5
+	crew_tag.font_size = 32
+	crew_tag.pixel_size = 0.01
+	crew_tag.modulate = Color(0.45, 0.9, 1.0)
+	mission_crew_member.add_child(crew_tag)
 
 func _create_mission_beacon(at: Vector3, tint: Color, caption: String) -> Node3D:
 	var root := Node3D.new()
@@ -1275,17 +1310,28 @@ func _create_mission_beacon(at: Vector3, tint: Color, caption: String) -> Node3D
 func _try_start_mission() -> bool:
 	if mission_state == "available" or mission_state == "complete":
 		if player.global_position.distance_to(mission_marker.global_position) <= 7.0:
-			mission_state = "collect"
+			mission_state = "briefing"
+			mission_phase_timer = 4.5
 			mission_tokens = 0
 			for pickup in mission_pickups:
-				pickup.visible = true
+				pickup.visible = false
 			getaway_marker.visible = false
 			wanted_level = 0
+			if mission_crew_member:
+				mission_crew_member.visible = true
 			return true
 	return false
 
 func _update_mission() -> void:
-	if mission_state == "collect":
+	if mission_state == "briefing":
+		mission_phase_timer = maxf(0.0, mission_phase_timer - get_physics_process_delta_time())
+		if mission_phase_timer <= 0.0:
+			mission_state = "collect"
+			for pickup in mission_pickups:
+				pickup.visible = true
+			if mission_crew_member:
+				mission_crew_member.visible = false
+	elif mission_state == "collect":
 		for pickup in mission_pickups:
 			if pickup.visible and (player.global_position.distance_to(pickup.global_position) < 10.0 or (driving and car.global_position.distance_to(pickup.global_position) < 10.0)):
 				pickup.visible = false
@@ -1308,8 +1354,10 @@ func _mission_status_text() -> String:
 	match mission_state:
 		"available", "complete":
 			return "FLEECA JOB\n" + ("HEIST COMPLETE  •  $5,000 TAKE\nLose the heat and return to the blue marker to replay." if mission_state == "complete" else "Meet your crew outside Coastline Bank  •  Press E / Y to start.")
+		"briefing":
+			return "FLEECA JOB  •  CREW BRIEFING\nYour partner is ready. Get inside and make the score.\n" + str(int(ceil(mission_phase_timer))) + "..."
 		"collect":
-			return "FLEECA JOB  •  THE SCORE\nGrab the 3 glowing cash bags: %d/3" % mission_tokens
+			return "FLEECA JOB  •  THE SCORE\nCollect the 3 glowing cash bags inside the bank: %d/3" % mission_tokens
 		"escape":
 			return "FLEECA JOB  •  GETAWAY\nWanted level active! Get in your getaway car and reach the green marker."
 	return ""
