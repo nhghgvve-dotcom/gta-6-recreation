@@ -1,4 +1,4 @@
-name: Build Coastline Trailer MP4
+name: Build Coastline Cinematic Trailer
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   render-trailer:
-    name: Compile numbered frames into MP4
+    name: Render cinematic video and mix audio
     runs-on: ubuntu-latest
     steps:
       - name: Check out Coastline
@@ -30,13 +30,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Validate trailer frames
+      - name: Validate frames and audio
         shell: bash
         run: |
           set -euo pipefail
           if [[ ! -f trailer/frames/frame_0001.png ]]; then
             echo "::error::Missing trailer/frames/frame_0001.png"
-            echo "Add numbered PNG frames: frame_0001.png, frame_0002.png, ..."
             exit 1
           fi
           count=$(find trailer/frames -maxdepth 1 -type f -regextype posix-extended -regex '.*/frame_[0-9]{4}\.png' | wc -l)
@@ -44,30 +43,46 @@ jobs:
             echo "::error::At least two numbered PNG frames are required."
             exit 1
           fi
-          echo "Found $count frame(s)."
+          if [[ ! -f trailer/audio/music.mp3 ]]; then
+            echo "::error::Missing trailer/audio/music.mp3. Add a soundtrack you have permission to use."
+            exit 1
+          fi
           echo "FRAME_COUNT=$count" >> "$GITHUB_ENV"
+          echo "Found $count frame(s) and soundtrack."
 
-      - name: Render MP4
+      - name: Render MP4 with soundtrack and optional effects
         env:
           FPS: ${{ inputs.fps }}
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p output
-          ffmpeg -y \
-            -framerate "$FPS" \
-            -start_number 1 \
-            -i trailer/frames/frame_%04d.png \
-            -frames:v "$FRAME_COUNT" \
-            -c:v libx264 \
-            -preset medium \
-            -crf 18 \
-            -pix_fmt yuv420p \
-            -movflags +faststart \
-            output/Coastline-Trailer.mp4
+          duration=$(awk -v n="$FRAME_COUNT" -v fps="$FPS" 'BEGIN { printf "%.3f", n/fps }')
+          fade_start=$(awk -v d="$duration" 'BEGIN { v=d-2; if (v<0) v=0; printf "%.3f", v }')
+
+          if [[ -f trailer/audio/effects.wav ]]; then
+            ffmpeg -y \
+              -framerate "$FPS" -start_number 1 -i trailer/frames/frame_%04d.png \
+              -stream_loop -1 -i trailer/audio/music.mp3 \
+              -stream_loop -1 -i trailer/audio/effects.wav \
+              -filter_complex "[1:a]volume=0.72[music];[2:a]volume=0.85[fx];[music][fx]amix=inputs=2:duration=longest:dropout_transition=2,afade=t=out:st=$fade_start:d=2[aout]" \
+              -map 0:v:0 -map "[aout]" -frames:v "$FRAME_COUNT" -t "$duration" \
+              -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
+              -c:a aac -b:a 192k -movflags +faststart output/Coastline-Trailer.mp4
+          else
+            ffmpeg -y \
+              -framerate "$FPS" -start_number 1 -i trailer/frames/frame_%04d.png \
+              -stream_loop -1 -i trailer/audio/music.mp3 \
+              -map 0:v:0 -map 1:a:0 -frames:v "$FRAME_COUNT" -t "$duration" \
+              -af "volume=0.85,afade=t=out:st=$fade_start:d=2" \
+              -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
+              -c:a aac -b:a 192k -movflags +faststart output/Coastline-Trailer.mp4
+          fi
 
       - name: Upload finished MP4
         uses: actions/upload-artifact@v4
         with:
-          name: Coastline-Trailer-MP4
+          name: Coastline-Cinematic-Trailer-MP4
           path: output/Coastline-Trailer.mp4
           if-no-files-found: error
           retention-days: 14
