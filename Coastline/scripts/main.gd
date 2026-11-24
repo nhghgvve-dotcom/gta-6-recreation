@@ -1512,6 +1512,16 @@ func _create_pause_menu() -> void:
 	menu_stack.add_child(resume_button)
 	pause_buttons.append(resume_button)
 
+	var create_lobby_button := _make_pause_button("CREATE LOBBY")
+	create_lobby_button.pressed.connect(_open_create_lobby_from_pause)
+	menu_stack.add_child(create_lobby_button)
+	pause_buttons.append(create_lobby_button)
+
+	var join_lobby_button := _make_pause_button("JOIN LOBBY")
+	join_lobby_button.pressed.connect(_open_join_lobby_from_pause)
+	menu_stack.add_child(join_lobby_button)
+	pause_buttons.append(join_lobby_button)
+
 	var map_button := _make_pause_button("MAP")
 	map_button.pressed.connect(_focus_pause_button.bind(0))
 	menu_stack.add_child(map_button)
@@ -2023,6 +2033,20 @@ func _create_multiplayer_ui(layer: CanvasLayer) -> void:
 func _toggle_multiplayer_panel() -> void:
 	if multiplayer_panel:
 		multiplayer_panel.visible = not multiplayer_panel.visible
+
+
+func _open_create_lobby_from_pause() -> void:
+	if multiplayer_panel:
+		multiplayer_panel.visible = true
+		_host_multiplayer_room()
+
+
+func _open_join_lobby_from_pause() -> void:
+	if multiplayer_panel:
+		multiplayer_panel.visible = true
+		if multiplayer_room_input:
+			multiplayer_room_input.grab_focus()
+			_set_multiplayer_status("Enter your cousin's lobby code, then choose JOIN ROOM.")
 
 
 func _host_multiplayer_room() -> void:
