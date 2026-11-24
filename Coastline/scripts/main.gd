@@ -142,7 +142,74 @@ func _ready() -> void:
 	_create_traffic()
 	_load_police_assets()
 	_create_hud()
+	_show_brand_splash()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _show_brand_splash() -> void:
+	var splash_layer := CanvasLayer.new()
+	splash_layer.layer = 100
+	splash_layer.name = "LivingRoomStudiosSplash"
+	add_child(splash_layer)
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.modulate.a = 0.0
+	splash_layer.add_child(root)
+
+	var background := ColorRect.new()
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.color = Color("#0b1226")
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(background)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(center)
+
+	var stack := VBoxContainer.new()
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	stack.add_theme_constant_override("separation", 18)
+	center.add_child(stack)
+
+	var logo := TextureRect.new()
+	var logo_texture := load("res://assets/living_room_studios_logo.svg") as Texture2D
+	if logo_texture != null:
+		logo.texture = logo_texture
+	logo.custom_minimum_size = Vector2(540, 180)
+	logo.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	stack.add_child(logo)
+
+	var presenting := Label.new()
+	presenting.text = "PRESENTS"
+	presenting.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	presenting.add_theme_font_size_override("font_size", 16)
+	presenting.add_theme_color_override("font_color", Color("#9bb6df"))
+	stack.add_child(presenting)
+
+	var game_title := Label.new()
+	game_title.text = "COASTLINE"
+	game_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	game_title.add_theme_font_size_override("font_size", 38)
+	game_title.add_theme_color_override("font_color", Color("#f4f7ff"))
+	stack.add_child(game_title)
+
+	var tagline := Label.new()
+	tagline.text = "YOUR CITY. YOUR STORY."
+	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tagline.add_theme_font_size_override("font_size", 14)
+	tagline.add_theme_color_override("font_color", Color("#72d7dc"))
+	stack.add_child(tagline)
+
+	var fade_in := create_tween()
+	fade_in.tween_property(root, "modulate:a", 1.0, 0.42)
+	await fade_in.finished
+	await get_tree().create_timer(0.85).timeout
+	var fade_out := create_tween()
+	fade_out.tween_property(root, "modulate:a", 0.0, 0.55)
+	fade_out.tween_callback(splash_layer.queue_free)
 
 func _setup_vr() -> void:
 	# OpenXR activates PC-VR when a compatible runtime/headset is available.
