@@ -1,6 +1,5 @@
 extends SceneTree
 
-const FPS := 24
 const FRAMES_PER_SHOT := 72
 const OUTPUT_DIR := "res://../trailer/frames"
 
@@ -23,14 +22,9 @@ func _render() -> void:
 		await process_frame
 		await RenderingServer.frame_post_draw
 
-	if not ("camera" in game):
-		push_error("Coastline camera was not created")
-		quit(1)
-		return
-
 	var camera: Camera3D = game.get("camera")
 	if camera == null:
-		push_error("Coastline camera is null")
+		push_error("Coastline camera was not created")
 		quit(1)
 		return
 
@@ -53,7 +47,6 @@ func _render() -> void:
 func _shot(camera: Camera3D, start_pos: Vector3, end_pos: Vector3, start_target: Vector3, end_target: Vector3) -> void:
 	for i in range(FRAMES_PER_SHOT):
 		var blend := float(i) / float(FRAMES_PER_SHOT - 1)
-		# Smoothstep camera movement avoids abrupt linear starts and stops.
 		var eased := blend * blend * (3.0 - 2.0 * blend)
 		camera.global_position = start_pos.lerp(end_pos, eased)
 		camera.look_at(start_target.lerp(end_target, eased), Vector3.UP)
