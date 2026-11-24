@@ -119,6 +119,7 @@ var multiplayer_player_id := ""
 var multiplayer_connected := false
 var multiplayer_sync_timer := 0.0
 var multiplayer_panel: PanelContainer
+var multiplayer_pause_timer: Timer
 var multiplayer_status_label: Label
 var multiplayer_server_input: LineEdit
 var multiplayer_room_input: LineEdit
@@ -1976,6 +1977,7 @@ func _create_multiplayer_ui(layer: CanvasLayer) -> void:
 	multiplayer_panel.size = Vector2(580, 390)
 	multiplayer_panel.z_index = 30
 	multiplayer_panel.visible = false
+	multiplayer_panel.process_mode = Node.PROCESS_MODE_ALWAYS
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.025, 0.045, 0.09, 0.97)
 	style.border_color = Color(0.25, 0.78, 0.95, 0.95)
@@ -1983,6 +1985,12 @@ func _create_multiplayer_ui(layer: CanvasLayer) -> void:
 	style.set_corner_radius_all(14)
 	multiplayer_panel.add_theme_stylebox_override("panel", style)
 	layer.add_child(multiplayer_panel)
+	multiplayer_pause_timer = Timer.new()
+	multiplayer_pause_timer.wait_time = 0.05
+	multiplayer_pause_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+	multiplayer_pause_timer.timeout.connect(_poll_multiplayer_while_paused)
+	layer.add_child(multiplayer_pause_timer)
+	multiplayer_pause_timer.start()
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 12)
 	multiplayer_panel.add_child(stack)
@@ -2033,6 +2041,12 @@ func _create_multiplayer_ui(layer: CanvasLayer) -> void:
 func _toggle_multiplayer_panel() -> void:
 	if multiplayer_panel:
 		multiplayer_panel.visible = not multiplayer_panel.visible
+
+
+func _poll_multiplayer_while_paused() -> void:
+	if is_paused:
+		_poll_multiplayer(0.05)
+		_update_remote_player_visuals(0.05)
 
 
 func _open_create_lobby_from_pause() -> void:
