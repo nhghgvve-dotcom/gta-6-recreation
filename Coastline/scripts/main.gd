@@ -227,38 +227,66 @@ func _setup_vr() -> void:
 	# Tracked controllers are attached under XROrigin once the player rig exists.
 
 func _setup_environment() -> void:
+	# Cinematic tropical lighting baseline. Forward+ enables screen-space
+	# effects on desktop; the Mobile renderer keeps the project usable on
+	# supported mobile hardware with those effects gracefully unavailable.
 	var world_env := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
+
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.075, 0.055, 0.19)
-	sky_mat.sky_horizon_color = Color(0.92, 0.34, 0.43)
-	sky_mat.ground_bottom_color = Color(0.10, 0.12, 0.20)
-	sky_mat.ground_horizon_color = Color(0.66, 0.31, 0.39)
-	sky_mat.sun_angle_max = 18.0
+	sky_mat.sky_top_color = Color(0.055, 0.105, 0.22)
+	sky_mat.sky_horizon_color = Color(0.92, 0.48, 0.34)
+	sky_mat.ground_bottom_color = Color(0.075, 0.105, 0.14)
+	sky_mat.ground_horizon_color = Color(0.48, 0.34, 0.29)
+	sky_mat.sun_angle_max = 12.0
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.82
+	env.ambient_light_energy = 0.9
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.ssr_enabled = false
+
+	# Screen-space depth and reflection effects add contact shading and
+	# believable highlights to glass, wet roads, and vehicle paint.
+	env.ssao_enabled = true
+	env.ssao_radius = 2.2
+	env.ssao_intensity = 1.35
+	env.ssao_power = 1.35
+	env.ssil_enabled = true
+	env.ssil_radius = 4.0
+	env.ssil_intensity = 0.55
+	env.ssr_enabled = true
+	env.ssr_max_steps = 48
+	env.ssr_fade_in = 0.12
+	env.ssr_fade_out = 2.0
+
+	# Light atmospheric haze gives the skyline depth without washing out
+	# nearby objects. Keep volumetric fog subtle for performance.
+	env.volumetric_fog_enabled = true
+	env.volumetric_fog_density = 0.008
+	env.volumetric_fog_albedo = Color(0.72, 0.79, 0.88)
+	env.volumetric_fog_length = 180.0
+
 	env.glow_enabled = true
-	env.glow_intensity = 0.28
-	env.glow_bloom = 0.08
+	env.glow_intensity = 0.22
+	env.glow_bloom = 0.045
 	env.adjustment_enabled = true
-	env.adjustment_brightness = 1.03
-	env.adjustment_contrast = 1.08
-	env.adjustment_saturation = 1.12
+	env.adjustment_brightness = 1.0
+	env.adjustment_contrast = 1.12
+	env.adjustment_saturation = 1.08
 	world_env.environment = env
 	add_child(world_env)
+
 	sun = DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-42, -28, 0)
-	sun.light_energy = 1.25
+	sun.rotation_degrees = Vector3(-38, -32, 0)
+	sun.light_color = Color(1.0, 0.88, 0.72)
+	sun.light_energy = 1.35
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 180.0
+	sun.directional_shadow_max_distance = 220.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sun.shadow_bias = 0.035
+	sun.shadow_bias = 0.025
+	sun.shadow_normal_bias = 1.2
 	add_child(sun)
 
 
