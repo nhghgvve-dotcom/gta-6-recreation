@@ -142,7 +142,6 @@ func _ready() -> void:
 	_create_traffic()
 	_load_police_assets()
 	_create_hud()
-	_show_brand_splash()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
