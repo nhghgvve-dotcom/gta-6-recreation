@@ -2,6 +2,7 @@ config_version=5
 
 [application]
 config/name="Coastline"
+config/icon="res://assets/coastline_app_icon.svg"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/description="A third-person tropical open-world driving and exploration prototype."
