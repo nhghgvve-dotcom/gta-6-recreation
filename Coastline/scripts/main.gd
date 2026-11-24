@@ -2622,11 +2622,21 @@ func _car_position_blocked(candidate_position: Vector3) -> bool:
 	query.collision_mask = 1
 	query.collide_with_bodies = true
 	query.collide_with_areas = false
-	# The hidden player CharacterBody3D stays seated inside the car while driving.
-	# Exclude it from the car's obstacle query so it cannot block every movement step.
+	# Ignore the seated character and any collision objects imported inside the car model.
+	var excluded: Array[RID] = []
 	if is_instance_valid(player):
-		query.exclude = [player.get_rid()]
+		excluded.append(player.get_rid())
+	if is_instance_valid(car):
+		_collect_collision_rids(car, excluded)
+	query.exclude = excluded
 	return not get_world_3d().direct_space_state.intersect_shape(query, 8).is_empty()
+
+
+func _collect_collision_rids(node: Node, output: Array[RID]) -> void:
+	if node is CollisionObject3D:
+		output.append((node as CollisionObject3D).get_rid())
+	for child in node.get_children():
+		_collect_collision_rids(child, output)
 
 
 func _drive_car(delta: float) -> void:
