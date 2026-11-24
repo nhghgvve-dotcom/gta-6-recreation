@@ -9,7 +9,7 @@ boot_splash/fullsize=true
 boot_splash/minimum_display_time=20.0
 boot_splash/bg_color=Color(0.03, 0.06, 0.14, 1)
 run/main_scene="res://Splash.tscn"
-config/features=PackedStringArray("4.4", "GL Compatibility")
+config/features=PackedStringArray("4.4", "Forward Plus")
 config/description="A third-person tropical open-world driving and exploration prototype."
 
 [display]
@@ -26,7 +26,7 @@ openxr/extensions/hand_interaction_profile=true
 
 [rendering]
 textures/vram_compression/import_etc2_astc=true
-renderer/rendering_method="gl_compatibility"
+renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="mobile"
 textures/default_filters/use_nearest_mipmap_filter=false
 environment/defaults/default_clear_color=Color(0.47, 0.68, 0.82, 1)
