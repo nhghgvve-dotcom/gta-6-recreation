@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+<defs>
+ <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#080f24"/><stop offset=".58" stop-color="#172342"/><stop offset="1" stop-color="#090f20"/></linearGradient>
+ <linearGradient id="sun" x2="0" y2="1"><stop stop-color="#ffe0a0"/><stop offset="1" stop-color="#f17b75"/></linearGradient>
+ <linearGradient id="sea" x2="0" y2="1"><stop stop-color="#41c5cf"/><stop offset="1" stop-color="#12617e"/></linearGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="24"/></filter>
+</defs>
+<rect width="1920" height="1080" fill="url(#bg)"/>
+<circle cx="960" cy="430" r="190" fill="#f08b80" opacity=".22" filter="url(#glow)"/>
+<circle cx="960" cy="430" r="142" fill="url(#sun)"/>
+<path d="M0 620 Q260 570 500 620 T960 620 T1420 620 T1920 620 V1080 H0Z" fill="#101c37"/>
+<path d="M0 665 Q240 625 480 665 T960 665 T1440 665 T1920 665" fill="none" stroke="url(#sea)" stroke-width="9" opacity=".9"/>
+<path d="M0 735 Q260 690 520 735 T1040 735 T1560 735 T1920 735" fill="none" stroke="#43c4cf" stroke-width="5" opacity=".55"/>
+<path d="M0 805 Q250 765 500 805 T1000 805 T1500 805 T1920 805" fill="none" stroke="#43c4cf" stroke-width="3" opacity=".3"/>
+<text x="960" y="170" text-anchor="middle" fill="#9bb6df" font-family="Arial,sans-serif" font-size="28" letter-spacing="13">LIVING ROOM STUDIOS</text>
+<text x="960" y="890" text-anchor="middle" fill="#f5f7ff" font-family="Arial,sans-serif" font-size="104" font-weight="700" letter-spacing="18">COASTLINE</text>
+<text x="960" y="950" text-anchor="middle" fill="#72d7dc" font-family="Arial,sans-serif" font-size="27" letter-spacing="8">YOUR CITY. YOUR STORY.</text>
+</svg>
