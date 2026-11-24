@@ -486,6 +486,9 @@ func _build_world() -> void:
 				var w := rng.randf_range(12, 24)
 				var d := rng.randf_range(12, 24)
 				var h := rng.randf_range(14, 64)
+				# Reserve a clear footprint and approach around Coastline Bank.
+				if abs(bx - 190.0) < 27.0 and abs(bz - 215.0) < 27.0:
+					continue
 				# Keep building footprints out of every road corridor and its safety margin.
 				var overlaps_road := false
 				for road_z in [-180.0, -90.0, 0.0, 90.0, 180.0]:
@@ -1329,11 +1332,13 @@ func _create_mission_world() -> void:
 	_static_box(bank, Vector3(-13.0, 5.5, 0), Vector3(2, 11, 22), stone)
 	_static_box(bank, Vector3(13.0, 5.5, 0), Vector3(2, 11, 22), stone)
 	_static_box(bank, Vector3(0, 5.5, 10), Vector3(24, 11, 2), stone)
-	_static_box(bank, Vector3(-9.0, 5.5, -10), Vector3(10, 11, 2), stone)
-	_static_box(bank, Vector3(9.0, 5.5, -10), Vector3(10, 11, 2), stone)
+	# Leave a generous 12-metre opening in the front wall for reliable entry.
+	_static_box(bank, Vector3(-9.0, 5.5, -10), Vector3(6, 11, 2), stone)
+	_static_box(bank, Vector3(9.0, 5.5, -10), Vector3(6, 11, 2), stone)
 	_static_box(bank, Vector3(0, -0.25, 0), Vector3(24, 0.5, 22), stone)
 	_mesh_box(bank, Vector3(0, 10.9, 0), Vector3(29, 0.8, 23), gold, "BankRoofTrim")
-	_mesh_box(bank, Vector3(0, 4.8, -11.15), Vector3(12, 5.2, 0.3), glass, "BankFrontWindows")
+	_mesh_box(bank, Vector3(-9.0, 4.8, -11.15), Vector3(6, 5.2, 0.3), glass, "BankFrontWindowLeft")
+	_mesh_box(bank, Vector3(9.0, 4.8, -11.15), Vector3(6, 5.2, 0.3), glass, "BankFrontWindowRight")
 	_mesh_box(bank, Vector3(0, 2.0, -11.3), Vector3(3.0, 4.0, 0.5), gold, "BankEntrance")
 	_mesh_box(bank, Vector3(0, 1.2, 8.7), Vector3(8, 2.4, 0.5), gold, "VaultFeatureDoor")
 	var sign_label := Label3D.new()
