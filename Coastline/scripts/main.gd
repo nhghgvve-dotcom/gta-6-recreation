@@ -695,11 +695,35 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 func _play_person_animation(anim_player: AnimationPlayer, wanted: String) -> void:
 	if anim_player == null:
 		return
-	for animation_name in anim_player.get_animation_list():
-		if String(animation_name).to_lower().contains(wanted.to_lower()):
-			if anim_player.current_animation != animation_name:
-				anim_player.play(animation_name)
-			return
+
+	# Imported character packs use slightly different names for common actions.
+	# Match a small set of aliases so one controller works across all pedestrians.
+	var aliases: Array[String] = [wanted.to_lower()]
+	match wanted.to_lower():
+		"idle":
+			aliases.append_array(["standing", "stand", "breathing"])
+		"walk":
+			aliases.append_array(["walking", "walk_cycle"])
+		"run":
+			aliases.append_array(["running", "sprint", "jog"])
+		"jump":
+			aliases.append_array(["leap", "takeoff", "jumping"])
+		"fall":
+			aliases.append_array(["falling", "airborne", "jump"])
+		"enter":
+			aliases.append_array(["getting_in", "get_in", "enter_vehicle", "walk"])
+		"sit":
+			aliases.append_array(["sitting", "seated", "idle"])
+
+	var animation_list := anim_player.get_animation_list()
+	for alias in aliases:
+		for animation_name in animation_list:
+			var candidate := String(animation_name).to_lower()
+			if candidate == alias or candidate.ends_with("/" + alias) or candidate.contains(alias):
+				if anim_player.current_animation != animation_name:
+					# A short crossfade avoids harsh snapping between locomotion states.
+					anim_player.play(animation_name, 0.18)
+				return
 
 func _create_weapon_visual() -> void:
 	# Attach the fictional energy emitter to the animated character's right hand.
@@ -2452,22 +2476,25 @@ func _move_player(delta: float) -> void:
 	player.velocity.x = move_toward(player.velocity.x, target_x, acceleration * delta)
 	player.velocity.z = move_toward(player.velocity.z, target_z, acceleration * delta)
 
+	var wanted_animation := "run" if sprinting else "walk"
 	if direction.length() > 0.01:
 		# Convert the world movement direction back into player-local space
 		# before turning the imported character model.
 		var local_direction := player.global_transform.basis.inverse() * direction
 		var target_yaw := atan2(local_direction.x, local_direction.z)
 		player_visual.rotation.y = lerp_angle(player_visual.rotation.y, target_yaw, min(1.0, delta * 9.0))
-		_play_person_animation(player_anim_player, "run" if sprinting else "walk")
 	else:
-		_play_person_animation(player_anim_player, "idle")
+		wanted_animation = "idle"
 
 	if player.is_on_floor():
-		if Input.is_action_pressed("jump") and player.velocity.y <= 0.0:
+		if Input.is_action_just_pressed("jump") and player.velocity.y <= 0.0:
 			player.velocity.y = 6.0
+			wanted_animation = "jump"
 	else:
 		player.velocity.y -= 18.0 * delta
+		wanted_animation = "jump" if player.velocity.y > 0.0 else "fall"
 
+	_play_person_animation(player_anim_player, wanted_animation)
 	player.move_and_slide()
 	player.global_position.x = clamp(player.global_position.x, -238, 238)
 	player.global_position.z = clamp(player.global_position.z, -238, 238)
@@ -2530,7 +2557,8 @@ func _update_npcs(delta: float) -> void:
 		npc_walk_times[key] = remaining
 		if state != "startled":
 			npc.rotation.y = PI / 2.0 if direction > 0.0 else -PI / 2.0
-		_play_person_animation(npc_anim_players.get(key), "run" if state == "fleeing" else "walk")
+		var npc_animation := "idle" if state == "startled" else ("run" if state == "fleeing" else "walk")
+		_play_person_animation(npc_anim_players.get(key), npc_animation)
 
 func _check_car_pedestrian_collisions() -> void:
 	if abs(car_velocity) < 5.0:
@@ -2722,7 +2750,7 @@ func _enter_car() -> void:
 	player.velocity = Vector3.ZERO
 	door_audio.pitch_scale = rng.randf_range(0.92, 1.08)
 	door_audio.play()
-	_play_person_animation(player_anim_player, "walk")
+	_play_person_animation(player_anim_player, "enter")
 	var door_position := car.global_position + car.global_transform.basis.x * 1.25 + Vector3(0, 0.15, 0)
 	var seat_position := car.global_position + Vector3(0, 0.65, 0)
 	var entry_tween := create_tween()
