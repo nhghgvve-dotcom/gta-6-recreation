@@ -1333,7 +1333,7 @@ func _update_mission() -> void:
 				mission_crew_member.visible = false
 	elif mission_state == "collect":
 		for pickup in mission_pickups:
-			if pickup.visible and (player.global_position.distance_to(pickup.global_position) < 10.0 or (driving and car.global_position.distance_to(pickup.global_position) < 10.0)):
+			if pickup.visible and (player.global_position.distance_to(pickup.global_position) < 4.0 or (driving and car.global_position.distance_to(pickup.global_position) < 4.0)):
 				pickup.visible = false
 				mission_tokens += 1
 			if mission_tokens >= mission_pickups.size():
