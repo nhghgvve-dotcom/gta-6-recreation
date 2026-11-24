@@ -3,12 +3,12 @@ config_version=5
 [application]
 config/name="Coastline"
 config/icon="res://assets/coastline_app_icon.svg"
-boot_splash/show_image=true
+boot_splash/show_image=false
 boot_splash/image="res://assets/living_room_studios_boot_splash.svg"
 boot_splash/fullsize=true
 boot_splash/minimum_display_time=20.0
 boot_splash/bg_color=Color(0.03, 0.06, 0.14, 1)
-run/main_scene="res://Main.tscn"
+run/main_scene="res://Splash.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 config/description="A third-person tropical open-world driving and exploration prototype."
 
