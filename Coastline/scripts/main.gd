@@ -1464,7 +1464,7 @@ func _update_mission() -> void:
 func _mission_status_text() -> String:
 	match mission_state:
 		"available", "complete":
-			return "FLEECA JOB\n" + ("HEIST COMPLETE  •  $5,000 TAKE\nLose the heat and return to the blue marker to replay." if mission_state == "complete" else "Meet your crew outside Coastline Bank  •  Press E / Y to start.")
+			return "FLEECA JOB\n" + ("HEIST COMPLETE  •  $5,000 TAKE\nLose the heat and return to the blue marker to replay." if mission_state == "complete" else "COASTLINE BANK: You can walk inside on foot—no car needed.\nMeet your crew outside and press E / Y to start.")
 		"briefing":
 			return "FLEECA JOB  •  CREW BRIEFING\nYour partner is ready. Get inside and make the score.\n" + str(int(ceil(mission_phase_timer))) + "..."
 		"collect":
@@ -2611,6 +2611,20 @@ func _update_impact_effects(delta: float) -> void:
 	else:
 		impact_overlay.color = Color(0.72, 0.015, 0.025, 0.0)
 
+func _car_position_blocked(candidate_position: Vector3) -> bool:
+	# Sweep an approximate vehicle-sized box against the world collision bodies.
+	# Buildings and the bank already use StaticBody3D collision shapes.
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(2.2, 1.25, 4.4)
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis(Vector3.UP, car_yaw), candidate_position + Vector3(0, 0.72, 0))
+	query.collision_mask = 1
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	return not get_world_3d().direct_space_state.intersect_shape(query, 8).is_empty()
+
+
 func _drive_car(delta: float) -> void:
 	var throttle := Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
 	var steer := Input.get_action_strength("move_left") - Input.get_action_strength("move_right")
@@ -2618,10 +2632,17 @@ func _drive_car(delta: float) -> void:
 	if abs(car_velocity) > 0.5:
 		car_yaw += steer * delta * 1.55 * sign(car_velocity) * clamp(abs(car_velocity) / 12.0, 0.25, 1.0)
 	car.rotation.y = car_yaw
-	car.position += -car.global_transform.basis.z * car_velocity * delta
-	car.position.x = clamp(car.position.x, -238, 238)
-	car.position.z = clamp(car.position.z, -238, 238)
-	car.position.y = -0.2
+	var travel := -car.global_transform.basis.z * car_velocity * delta
+	var candidate_position := car.position + travel
+	candidate_position.x = clamp(candidate_position.x, -238, 238)
+	candidate_position.z = clamp(candidate_position.z, -238, 238)
+	candidate_position.y = -0.2
+	if _car_position_blocked(candidate_position):
+		# Arcade impact response: stop at the obstacle and briefly rebound.
+		car_velocity = -car_velocity * 0.12
+		_trigger_impact_effect()
+	else:
+		car.position = candidate_position
 	_check_car_pedestrian_collisions()
 	if Input.is_action_pressed("vehicle_brake"):
 		car_velocity = move_toward(car_velocity, 0, 28 * delta)
