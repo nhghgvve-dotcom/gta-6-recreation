@@ -113,7 +113,7 @@ var remote_status_label: Label
 
 # Cross-platform internet multiplayer client.
 var multiplayer_socket := WebSocketPeer.new()
-var multiplayer_server_url := "wss://coastline-multiplayer.onrender.com"
+var multiplayer_server_url := "wss://coastline-online-game.onrender.com"
 var multiplayer_room := ""
 var multiplayer_player_id := ""
 var multiplayer_connected := false
@@ -1963,6 +1963,7 @@ func _create_multiplayer_ui(layer: CanvasLayer) -> void:
 	multiplayer_panel.name = "MultiplayerPanel"
 	multiplayer_panel.position = Vector2(350, 170)
 	multiplayer_panel.custom_minimum_size = Vector2(580, 390)
+	multiplayer_panel.size = Vector2(580, 390)
 	multiplayer_panel.z_index = 30
 	multiplayer_panel.visible = false
 	var style := StyleBoxFlat.new()
@@ -2085,11 +2086,12 @@ func _poll_multiplayer(delta: float) -> void:
 		multiplayer_sync_timer += delta
 		if multiplayer_sync_timer >= 0.10 and player != null:
 			multiplayer_sync_timer = 0.0
-			var p := player.global_position
+			var p := car.global_position if driving and is_instance_valid(car) else player.global_position
+			var heading := car_yaw if driving else player.rotation.y
 			multiplayer_socket.send_text(JSON.stringify({
 				"type": "state",
 				"position": [p.x, p.y, p.z],
-				"rotation": player.rotation.y,
+				"rotation": heading,
 				"driving": driving
 			}))
 	elif state == WebSocketPeer.STATE_CLOSED and multiplayer_connected:
