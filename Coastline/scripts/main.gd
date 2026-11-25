@@ -1209,6 +1209,8 @@ func _attach_soft_body_vehicle(vehicle_model: Node3D) -> void:
 
 
 func _find_soft_body_mesh(node: Node) -> MeshInstance3D:
+	if String(node.name) == "CoastlineInterior":
+		return null
 	var best_mesh: MeshInstance3D = null
 	var best_volume := 0.0
 	for child in node.get_children():
