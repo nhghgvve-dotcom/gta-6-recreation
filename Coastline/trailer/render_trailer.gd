@@ -35,11 +35,13 @@ func _render() -> void:
 		if child is CanvasLayer:
 			child.visible = false
 
-	# Four moving camera passes through the actual procedurally-built Coastline map.
+	# Six cinematic camera passes through the actual procedurally-built Coastline map.
 	await _shot(camera, Vector3(-30, 150, 285), Vector3(30, 118, 210), Vector3(0, 0, 0), Vector3(25, 0, -15))
 	await _shot(camera, Vector3(-225, 18, -155), Vector3(-95, 13, -165), Vector3(-80, 5, -180), Vector3(45, 8, -180))
 	await _shot(camera, Vector3(115, 52, 100), Vector3(65, 36, 35), Vector3(25, 12, 0), Vector3(-40, 10, -45))
 	await _shot(camera, Vector3(-220, 18, 25), Vector3(-180, 13, 15), Vector3(-85, 7, 10), Vector3(-35, 10, -10))
+	await _shot(camera, Vector3(205, 82, -205), Vector3(125, 58, -125), Vector3(60, 12, -70), Vector3(10, 8, -25))
+	await _shot(camera, Vector3(250, 42, 185), Vector3(165, 28, 95), Vector3(95, 10, 35), Vector3(20, 8, -20))
 
 	print("Rendered ", frame_number - 1, " Coastline frames.")
 	quit(0)
