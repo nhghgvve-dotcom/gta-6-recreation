@@ -35,7 +35,7 @@ func build_deformable_body() -> SoftBody3D:
 	deformable_body.transform = source.transform
 	deformable_body.total_mass = body_mass
 	deformable_body.simulation_precision = simulation_precision
-	deformable_body.stiffness = body_stiffness
+	deformable_body.linear_stiffness = body_stiffness
 	deformable_body.damping_coefficient = damping
 	deformable_body.collision_layer = collision_layer
 	deformable_body.collision_mask = collision_mask
