@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p trailer/frames
-          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 "$GODOT_BIN"             --path Coastline             --script res://trailer/render_trailer.gd             --xr-mode off             --rendering-method gl_compatibility             --resolution 1280x720
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 "$GODOT_BIN"             --path Coastline             --script res://trailer/render_trailer.gd             --xr-mode off             --rendering-method gl_compatibility             --resolution 960x540
           count=$(find trailer/frames -maxdepth 1 -type f -name 'frame_*.png' | wc -l)
           if [[ "$count" -ne 432 ]]; then
             echo "::error::Expected 432 rendered frames, found $count."
