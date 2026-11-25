@@ -29,6 +29,24 @@ jobs:
           chmod +x /tmp/godot/Godot_v4.4.1-stable_linux.x86_64
           echo "GODOT_BIN=/tmp/godot/Godot_v4.4.1-stable_linux.x86_64" >> "$GITHUB_ENV"
 
+      - name: Download Coastline character and vehicle assets
+        run: |
+          set -euo pipefail
+          mkdir -p Coastline/assets/people Coastline/assets/vehicles
+          curl -fL https://models.vinish.dev/people/casual-man.glb -o Coastline/assets/people/casual-man.glb
+          curl -fL https://models.vinish.dev/people/casual-woman.glb -o Coastline/assets/people/casual-woman.glb
+          curl -fL https://models.vinish.dev/people/business-man.glb -o Coastline/assets/people/business-man.glb
+          curl -fL https://models.vinish.dev/people/business-woman.glb -o Coastline/assets/people/business-woman.glb
+          curl -fL https://models.vinish.dev/people/construction-worker.glb -o Coastline/assets/people/construction-worker.glb
+          curl -fL https://models.vinish.dev/people/doctor.glb -o Coastline/assets/people/doctor.glb
+          curl -fL https://models.vinish.dev/people/runner-woman.glb -o Coastline/assets/people/runner.glb
+          curl -fL https://grab3d.com/dl/sports-car/sports-car.glb -o Coastline/assets/vehicles/sports-car.glb
+          curl -fL "https://files.innerscene.com/library/police-officer-standing-3d-person-emergency-services-9fd93114/5a54c44f2bfc5920ccd2/professional-police-officer.glb" -o Coastline/assets/people/police-officer.glb
+          curl -fL "https://shuriken.studio/models/download/6fb5a1fb-25d8-4fdc-9e4b-a605a39f884c" -o Coastline/assets/vehicles/police-helicopter.glb
+          cp Coastline/assets/vehicles/sports-car.glb Coastline/assets/vehicles/police-car.glb
+          test -s Coastline/assets/vehicles/police-helicopter.glb
+          test -s Coastline/assets/vehicles/sports-car.glb
+
       - name: Import Coastline assets
         run: |
           "$GODOT_BIN" --headless --path Coastline --editor --quit
