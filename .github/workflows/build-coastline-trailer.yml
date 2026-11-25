@@ -33,13 +33,13 @@ jobs:
         run: |
           "$GODOT_BIN" --headless --path Coastline --editor --quit
 
-      - name: Render 288 separate frames from the actual Coastline game
+      - name: Render 432 separate frames from the actual Coastline game
         run: |
           set -euo pipefail
           mkdir -p trailer/frames
           xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 "$GODOT_BIN"             --path Coastline             --script res://trailer/render_trailer.gd             --xr-mode off             --rendering-method gl_compatibility             --resolution 1280x720
           count=$(find trailer/frames -maxdepth 1 -type f -name 'frame_*.png' | wc -l)
-          if [[ "$count" -ne 288 ]]; then
+          if [[ "$count" -ne 432 ]]; then
             echo "::error::Expected 288 rendered frames, found $count."
             exit 1
           fi
@@ -50,7 +50,7 @@ jobs:
           python3 - <<'PY'
           import math, random, struct, wave
           sample_rate = 44100
-          duration = 14.0
+          duration = 20.0
           rng = random.Random(41)
           roots = [110.00, 130.81, 98.00, 146.83]
           melody = [440.00, 523.25, 587.33, 659.25, 587.33, 523.25, 493.88, 440.00]
@@ -97,7 +97,7 @@ jobs:
           if [[ -f trailer/audio/music.mp3 ]]; then
             audio_input="trailer/audio/music.mp3"
           fi
-          ffmpeg -y             -framerate 24 -start_number 1 -i trailer/frames/frame_%04d.png             -stream_loop -1 -i "$audio_input"             -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='COASTLINE':fontcolor=white:fontsize=76:x=(w-text_w)/2:y=h*0.76:enable='gte(t,9)',drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='YOUR CITY. YOUR STORY.':fontcolor=white:fontsize=28:x=(w-text_w)/2:y=h*0.86:enable='gte(t,9)',fade=t=out:st=10.8:d=1.2"             -map 0:v:0 -map 1:a:0 -frames:v 288 -t 12             -af "volume=0.9,afade=t=out:st=10.5:d=1.5"             -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p             -c:a aac -b:a 192k -movflags +faststart             output/Coastline-Trailer.mp4
+          ffmpeg -y             -framerate 24 -start_number 1 -i trailer/frames/frame_%04d.png             -stream_loop -1 -i "$audio_input"             -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='COASTLINE':fontcolor=white:fontsize=76:x=(w-text_w)/2:y=h*0.76:enable='gte(t,13)',drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='YOUR CITY. YOUR STORY.':fontcolor=white:fontsize=28:x=(w-text_w)/2:y=h*0.86:enable='gte(t,9)',fade=t=out:st=16.8:d=1.2"             -map 0:v:0 -map 1:a:0 -frames:v 432 -t 18             -af "volume=0.9,afade=t=out:st=16.5:d=1.5"             -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p             -c:a aac -b:a 192k -movflags +faststart             output/Coastline-Trailer.mp4
           ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 output/Coastline-Trailer.mp4
 
       - name: Upload finished MP4
