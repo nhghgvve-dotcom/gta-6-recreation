@@ -40,7 +40,7 @@ jobs:
           xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 "$GODOT_BIN"             --path Coastline             --script res://trailer/render_trailer.gd             --xr-mode off             --rendering-method gl_compatibility             --resolution 1280x720
           count=$(find trailer/frames -maxdepth 1 -type f -name 'frame_*.png' | wc -l)
           if [[ "$count" -ne 432 ]]; then
-            echo "::error::Expected 288 rendered frames, found $count."
+            echo "::error::Expected 432 rendered frames, found $count."
             exit 1
           fi
           echo "FRAME_COUNT=$count" >> "$GITHUB_ENV"
@@ -73,12 +73,17 @@ jobs:
                   lead = math.sin(2 * math.pi * melody[note_index] * t) * melody_env * 0.075
                   beat_phase = t % 0.75
                   kick = math.sin(2 * math.pi * (48 + 35 * math.exp(-beat_phase * 18)) * t) * math.exp(-beat_phase * 11) * 0.22
+                  rotor = 0.0
+                  if t >= 10.0:
+                      rotor_phase = (t - 10.0) * 2 * math.pi * 18.0
+                      rotor = (max(0.0, math.sin(rotor_phase)) ** 7 - 0.12) * 0.055
+                      rotor += math.sin(2 * math.pi * 42.0 * t) * 0.018
                   swell = 0.0
                   for cut in (3.0, 6.0, 9.0):
                       age = t - (cut - 0.7)
                       if 0 <= age <= 0.7:
                           swell += (rng.random() * 2 - 1) * (age / 0.7) ** 2 * 0.035
-                  mono = max(-0.92, min(0.92, (pad + bass + lead + kick + swell) * fade_in * fade_out))
+                  mono = max(-0.92, min(0.92, (pad + bass + lead + kick + swell + rotor) * fade_in * fade_out))
                   left = int(mono * 32767)
                   right = int(mono * 32767 * 0.97)
                   chunk.extend(struct.pack("<hh", left, right))
