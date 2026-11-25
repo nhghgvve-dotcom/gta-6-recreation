@@ -1185,7 +1185,51 @@ func _create_car() -> void:
 	car.add_child(car_model)
 	_create_vehicle_interior(car_model)
 	_collect_car_wheels(car_model)
+	_attach_soft_body_vehicle(car_model)
 	available_cars.append(car)
+
+
+func _attach_soft_body_vehicle(vehicle_model: Node3D) -> void:
+	# The deformable body helper is isolated from the existing arcade controller.
+	# It selects the largest non-wheel mesh as the body shell.
+	var helper_script := load("res://scripts/soft_body_vehicle.gd") as Script
+	if helper_script == null:
+		push_warning("Soft-body vehicle helper is missing; using standard car visuals.")
+		return
+	var body_mesh := _find_soft_body_mesh(vehicle_model)
+	if body_mesh == null:
+		push_warning("No suitable car body mesh found for soft-body simulation.")
+		return
+	var helper := Node.new()
+	helper.name = "SoftBodyVehicle"
+	helper.set_script(helper_script)
+	vehicle_model.add_child(helper)
+	helper.set("source_mesh_path", helper.get_path_to(body_mesh))
+	helper.call_deferred("build_deformable_body")
+
+
+func _find_soft_body_mesh(node: Node) -> MeshInstance3D:
+	var best_mesh: MeshInstance3D = null
+	var best_volume := 0.0
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			var mesh_instance := child as MeshInstance3D
+			var mesh_name := String(mesh_instance.name).to_lower()
+			if not (mesh_name.contains("wheel") or mesh_name.contains("tire") or mesh_name.contains("tyre")):
+				if mesh_instance.mesh != null:
+					var bounds := mesh_instance.mesh.get_aabb()
+					var volume := bounds.size.x * bounds.size.y * bounds.size.z
+					if volume > best_volume:
+						best_volume = volume
+						best_mesh = mesh_instance
+		var nested := _find_soft_body_mesh(child)
+		if nested != null and nested.mesh != null:
+			var nested_bounds := nested.mesh.get_aabb()
+			var nested_volume := nested_bounds.size.x * nested_bounds.size.y * nested_bounds.size.z
+			if nested_volume > best_volume:
+				best_volume = nested_volume
+				best_mesh = nested
+	return best_mesh
 
 
 func _create_vehicle_interior(vehicle_model: Node3D) -> void:
@@ -2723,6 +2767,7 @@ func _try_enter_nearest_car() -> void:
 		if car_model:
 			_create_vehicle_interior(car_model)
 			_collect_car_wheels(car_model)
+			_attach_soft_body_vehicle(car_model)
 		_react_to_vehicle_takeover()
 		_raise_wanted_level()
 	_enter_car()
