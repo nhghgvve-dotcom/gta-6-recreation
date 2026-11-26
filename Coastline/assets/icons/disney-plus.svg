@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<defs>
+ <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#180b50"/><stop offset=".48" stop-color="#c51c9b"/><stop offset="1" stop-color="#ff8749"/></linearGradient>
+ <linearGradient id="arc" x2="1" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#9ce8ff"/></linearGradient>
+ <clipPath id="clip"><rect x="10" y="10" width="236" height="236" rx="48"/></clipPath>
+</defs>
+<g clip-path="url(#clip)">
+ <rect width="256" height="256" fill="url(#bg)"/>
+ <circle cx="184" cy="116" r="62" fill="#ffd58a" opacity=".9"/>
+ <path d="M0 185Q55 150 112 183T256 176V256H0Z" fill="#251044" opacity=".8"/>
+ <path d="M0 212Q68 190 128 214T256 205" fill="none" stroke="#ff9bdc" stroke-width="4" opacity=".7"/>
+ <g fill="#160a32">
+  <path d="M25 190q20-49 8-91 18 28 18 51 10-26 33-38-23 22-25 43 20-19 40-13-31 7-45 48Z"/>
+  <path d="M198 193q10-48-8-83 22 25 22 48 12-21 31-25-24 15-29 38 18-14 33-9-28 5-41 31Z"/>
+ </g>
+ <path d="M55 111C79 62 129 39 180 56" fill="none" stroke="url(#arc)" stroke-width="8" stroke-linecap="round"/>
+ <path d="M180 56l-5-18 22 13-17 14" fill="#fff"/>
+ <path d="M64 140C87 105 122 88 164 91" fill="none" stroke="#fff" stroke-width="5" opacity=".8"/>
+ <text x="128" y="151" text-anchor="middle" font-family="Arial,sans-serif" font-size="57" font-weight="700" letter-spacing="-3" fill="#fff">Disney</text>
+ <text x="128" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#fff">+</text>
+ <rect x="10" y="10" width="236" height="236" rx="48" fill="none" stroke="#ffb8f0" stroke-width="4" stroke-opacity=".8"/>
+</g></svg>
